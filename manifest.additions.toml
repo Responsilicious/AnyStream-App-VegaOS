@@ -1,0 +1,72 @@
+# Merge these entries into the manifest.toml that `vega project generate` creates.
+# Prefer the generated manifest for [package], [components] and the runtime-module
+# line (it differs between React Native 0.72 and 0.83 templates); only add what is
+# missing below.
+
+[package]
+# Use your own reverse-DNS id. Keep the same id for every build you submit.
+title = "AnyStream"
+version = "0.1.0"
+# Launcher icon: 512 x 512 PNG under assets/image (Amazon manifest docs), made from docs/design/logo-transparent-a.png.
+icon = "@image/icon.png"
+
+[[wants.service]]
+# Needed so the app can play video through the W3C media player.
+id = "com.amazon.mediametrics.service"
+
+[[wants.service]]
+# The media pipeline queries codec capabilities through this service; without it HEVC is filtered out.
+id = "com.amazon.mediatransform.service"
+
+# The services below were refused in the device log ("Missing the permissions needed to connect");
+# without audio.control the audio sink cannot negotiate caps and playback dies with "not-negotiated".
+[[wants.service]]
+id = "com.amazon.audio.control"
+
+[[wants.service]]
+id = "com.amazon.audio.system"
+
+[[wants.service]]
+id = "com.amazon.mediabuffer.service"
+
+[[wants.service]]
+id = "com.amazon.media.playersession.service"
+
+# Rest of Amazon's "General requirements for media apps" manifest list (needed for certification).
+[[wants.service]]
+id = "com.amazon.media.server"
+
+[[wants.service]]
+id = "com.amazon.gipc.uuid.*"
+
+[[wants.service]]
+id = "com.amazon.audio.stream"
+
+[[wants.privilege]]
+# Required for captions.
+id = "com.amazon.devconf.privilege.accessibility"
+
+[offers]
+[[offers.service]]
+id = "com.amazon.gipc.uuid.*"
+
+[[wants.module]]
+id = "/com.amazon.kepler.media@IMediaContentService_1"
+
+[[wants.module]]
+id = "/com.amazon.mediatransform.lib@IMediaBufferProvider_1"
+
+[[wants.privilege]]
+# Reach the Jellyfin server over the network.
+id = "com.amazon.privilege.internet"
+
+# "Find servers on this network" reads the TV's IP address and netmask (@amazon-devices/keplerscript-netmgr-lib).
+[[wants.service]]
+id = "com.amazon.network.service"
+
+[[wants.privilege]]
+id = "com.amazon.network.privilege.net-info"
+
+# Appstore submission requires a category on the main component:
+# [[components.interactive]]
+# categories = ["com.amazon.category.main"]
