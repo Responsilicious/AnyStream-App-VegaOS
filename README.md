@@ -1,41 +1,48 @@
-# AnyStream (M1)
+# AnyStream
 
-A Netflix-style TV client for Jellyfin (Plex later), built in React Native for Vega OS.
+A Netflix-style TV client for Jellyfin and Plex servers, built in React Native for Vega OS
+(Amazon Fire TV). Version 0.1.0.
 
-M1 covers three things: the project foundation, Jellyfin sign-in, and a playback spike
-that proves video plays on a real device.
+## Status (29 Oct 2026)
+
+Version 0.1.0 is uploaded to the Amazon Appstore for armv7, aarch64 and x86_64, and is in Live
+App Testing and review. Everything below has been checked on a Fire TV Stick 4K Select unless
+marked otherwise.
 
 ## What works
 
-- Add a Jellyfin server by address (HTTPS preferred, falls back through sensible candidates).
-- Sign in with Quick Connect (nothing to type on a remote) or username and password.
-- Browse libraries as a poster grid, play a title.
-- Playback: direct play for MP4/M4V (H.264, HEVC) through the W3C media player; automatic fallback to
-  a server transcode (HLS) when direct play isn't possible or fails.
-- Resume position, progress reporting, and clean stop (including ending the server transcode).
-- Remote control: select/play-pause toggles, left/right skip 10 s, back exits.
-- 238 unit tests covering auth, URL handling, playback decisions, the player engine and controller.
+- **Jellyfin:** add a server by address or find it on the local network, sign in with Quick
+  Connect (nothing to type on a remote) or username and password.
+- **Plex:** link an account with a code at plex.tv/link, pick a server, and switch Plex Home
+  profiles.
+- **Several servers:** saved servers of either kind, a server manager, and quick switching
+  between them.
+- **Browsing:** Home rows with a featured preview, libraries, genres, search, and movie and series
+  pages with seasons and episodes.
+- **Playback:** direct play where the stick can decode the file (including 4K HEVC), otherwise a
+  server transcode delivered as HLS. Audio and subtitle choice from an in-player menu, resume
+  position, progress reporting, and a clean stop that ends the server transcode.
+- **Remote:** select toggles play and pause, left and right skip 10 s, back exits.
+- 23 unit test suites (about 360 tests) covering auth, connections, providers, playback
+  decisions, the player engine and controller.
 
-## What is not here yet
+## Known limitations
 
-Home rows, hero, genre menu, search, multi-server handling, Plex, settings and store polish
-are M2 onward (see the plan doc).
-
-## Honest status
-
-It builds with the Vega SDK and has run on a Fire TV Stick 4K Select: sign-in works and an HLS transcode
-plays with sound and skip. Several Vega-specific bugs were fixed to get there; see "Vega quirks found on
-device" in `AGENTS.md`. Not yet verified on the stick: MKV in URL-mode direct play, MP4 direct play,
-long-run smoothness, and the remaining risks below.
-
-1. Amazon's hls.js is vendored (see `src/hlsjsplayer/README.md`); keep it out of public repos.
-2. `KeplerVideoSurfaceView` lifecycle and caption view wiring in `src/screens/PlayerScreen.tsx`.
-3. Plain `http://` servers (common on home networks): confirm Vega permits cleartext traffic. If not,
-   the app needs HTTPS servers.
-4. `manifest.toml` runtime module id differs between React Native 0.72 and 0.83 templates.
-   Use the generated one and only merge in the entries from `manifest.additions.toml`.
-
-Test on a physical Fire TV Stick 4K Select before judging performance.
+- **Credentials are kept in app-private storage (MMKV).** Vega gives apps no keystore, so
+  Jellyfin and Plex tokens and the Plex signing key are stored in the app's private storage, not
+  encrypted. Passwords are never stored.
+- **MKV files are always transcoded by the server.** The stick's player can stall on some MKV
+  files without reporting an error, so the app sends them to the server instead of direct play.
+- **Plex links with the legacy account token.** Plex's newer JWT linking is written but switched
+  off (`PLEX_JWT_SIGN_IN` in `src/config.ts`), because Plex Media Server 1.43.5 refused the tokens
+  it produced.
+- **Server discovery covers Jellyfin only**, by scanning the local /24 network on port 8096. Vega
+  apps can't use UDP, so Jellyfin's own discovery is not possible. Plex servers come from the
+  Plex account.
+- Some Plex servers' local `plex.direct` HTTPS addresses use a certificate chain the stick doesn't
+  trust. Remote or other addresses are used instead.
+- `announceForAccessibility` does nothing on the stick (Vega's `AccessibilityManager` is missing).
+- Vega-specific workarounds are listed under "Vega quirks" in `AGENTS.md`.
 
 ## Setup
 
@@ -44,7 +51,9 @@ Test on a physical Fire TV Stick 4K Select before judging performance.
 2. From this folder run:
    `node scripts/apply-to-vega-project.mjs <path-to-generated-project>`
 3. In the generated project: `npm install`, then install the Vega packages your template pins
-   (`@amazon-devices/react-native-w3cmedia`, `@amazon-devices/react-native-mmkv`).
+   (`@amazon-devices/react-native-w3cmedia`, `@amazon-devices/react-native-mmkv`,
+   `@amazon-devices/keplerscript-netmgr-lib`, `@amazon-devices/keplercrypto`). See
+   `vega-project/package.json` for the versions used with React Native 0.83.
 4. Merge `manifest.additions.toml` into `manifest.toml`.
 5. Vendor Amazon's hls.js as described in `src/hlsjsplayer/README.md`.
 6. `npm run build:app`, then run on the Vega Virtual Device or a device.
@@ -78,10 +87,11 @@ once the Amazon hls.js files above are in place.
 
 ## Layout
 
-- `src/providers`: `MediaProvider` interface and the Jellyfin implementation. Plex will be a second provider.
+- `src/providers`: the `MediaProvider` interface with Jellyfin and Plex implementations.
+- `src/connections`: saved servers and accounts (`ConnectionStore`), and switching between them.
 - `src/player`: `PlayerEngine` (surface, hls.js, URL mode), `PlaybackController` (progress, fallback), `usePlayback`.
 - `src/screens`, `src/components`: the UI.
-- `src/storage`: sessions and device id (MMKV, with an in-memory fallback for tests).
+- `src/storage`: sessions, hidden items and device id (MMKV, with an in-memory fallback for tests).
 
 ## Licence
 
