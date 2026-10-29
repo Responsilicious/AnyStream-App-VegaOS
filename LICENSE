@@ -1,0 +1,32 @@
+Copyright (c) 2026 Responsilicious (https://github.com/Responsilicious). All rights reserved.
+
+This repository and everything in it (source code, documentation, designs, images
+and other files, together the "Software") is proprietary. It is made visible for
+viewing only. No licence is granted to you except as stated below.
+
+You may not, in whole or in part, and in any form or medium:
+
+  1. copy, reproduce or replicate the Software;
+  2. distribute, publish, sublicense, sell, lease or otherwise make the Software
+     available to anyone;
+  3. modify the Software or create derivative works based on it;
+  4. compile, build, package, install or run the Software, or submit it or any
+     work derived from it to any app store;
+  5. use the Software, or any part of it, to train or build other software or
+     machine-learning models.
+
+The only exception is that you may view the Software on the website where the
+copyright holder has published it, and make the transient copies your device
+needs to display it there, to the extent the terms of service of that website
+require.
+
+Any other use needs the prior written permission of the copyright holder.
+
+Third-party components that are not part of this repository, such as npm
+packages and Amazon's hls.js, remain under their own licences.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM, OUT OF
+OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.

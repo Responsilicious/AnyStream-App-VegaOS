@@ -82,3 +82,7 @@ once the Amazon hls.js files above are in place.
 - `src/player`: `PlayerEngine` (surface, hls.js, URL mode), `PlaybackController` (progress, fallback), `usePlayback`.
 - `src/screens`, `src/components`: the UI.
 - `src/storage`: sessions and device id (MMKV, with an in-memory fallback for tests).
+
+## Licence
+
+Proprietary, all rights reserved. No copying, distribution or derivative works without written permission. See `LICENSE`.
