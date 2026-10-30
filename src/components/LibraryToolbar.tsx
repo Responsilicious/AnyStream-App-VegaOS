@@ -24,20 +24,26 @@ interface Props {
 /** Filters and Sort under the page title, then one chip per applied filter, then Clear filters. */
 export function LibraryToolbar({ filterCount, sortText, chips, onFilters, onSort, onRemoveChip, onClear, preferred, inert, busy }: Props) {
   return (
-    <View style={styles.bar}>
-      <ToolButton
-        label={filterCount > 0 ? `Filters (${filterCount})` : 'Filters'}
-        spoken={filterCount > 0 ? `Filters, ${filterCount} applied` : 'Filters, none applied'}
-        active={filterCount > 0}
-        preferred={preferred === 'filters'}
-        inert={inert}
-        onPress={onFilters}
-      />
-      <ToolButton label={`Sort: ${sortText}`} spoken={`Sort, ${sortText}`} preferred={preferred === 'sort'} inert={inert} onPress={onSort} />
-      {chips.map(chip => (
-        <ToolButton key={chip.id} label={`${chip.label}  ×`} spoken={chip.removeLabel} chip inert={inert} onPress={() => (busy ? undefined : onRemoveChip(chip))} />
-      ))}
-      {chips.length > 0 ? <ToolButton label="Clear filters" spoken="Clear filters. Keeps the sort order" link inert={inert} onPress={() => (busy ? undefined : onClear())} /> : null}
+    <View>
+      <View style={styles.bar}>
+        <ToolButton
+          label={filterCount > 0 ? `Filters (${filterCount})` : 'Filters'}
+          spoken={filterCount > 0 ? `Filters, ${filterCount} applied` : 'Filters, none applied'}
+          active={filterCount > 0}
+          preferred={preferred === 'filters'}
+          inert={inert}
+          onPress={onFilters}
+        />
+        <ToolButton label={`Sort: ${sortText}`} spoken={`Sort, ${sortText}`} caret preferred={preferred === 'sort'} inert={inert} onPress={onSort} />
+      </View>
+      {chips.length > 0 ? (
+        <View style={styles.bar}>
+          {chips.map(chip => (
+            <ToolButton key={chip.id} label={`${chip.label}  ×`} spoken={chip.removeLabel} chip inert={inert} onPress={() => (busy ? undefined : onRemoveChip(chip))} />
+          ))}
+          <ToolButton label="Clear filters" spoken="Clear filters. Keeps the sort order" link inert={inert} onPress={() => (busy ? undefined : onClear())} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -51,6 +57,7 @@ function ToolButton({
   active,
   chip,
   link,
+  caret,
 }: {
   label: string;
   spoken: string;
@@ -60,6 +67,7 @@ function ToolButton({
   active?: boolean;
   chip?: boolean;
   link?: boolean;
+  caret?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -75,6 +83,7 @@ function ToolButton({
       <Text style={[styles.label, (active || chip) && styles.labelActive, link && styles.linkLabel]} numberOfLines={1}>
         {label}
       </Text>
+      {caret ? <View style={styles.caret} /> : null}
     </Pressable>
   );
 }
@@ -86,15 +95,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: px(28),
     marginRight: px(14),
     marginBottom: px(10),
-    borderRadius: px(32),
+    borderRadius: px(14),
     borderWidth: focus.borderWidth,
-    borderColor: 'transparent',
+    borderColor: colors.surfaceFocused,
     backgroundColor: colors.surface,
-    justifyContent: 'center',
-    maxWidth: px(520),
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: px(560),
   },
-  chip: { height: px(56), paddingHorizontal: px(22), backgroundColor: 'rgba(103,216,239,0.14)', borderColor: 'rgba(103,216,239,0.5)' },
-  link: { backgroundColor: 'transparent' },
+  caret: {
+    width: px(12),
+    height: px(12),
+    marginLeft: px(14),
+    marginTop: -px(6),
+    borderRightWidth: px(3),
+    borderBottomWidth: px(3),
+    borderColor: colors.text,
+    transform: [{ rotate: '45deg' }],
+  },
+  chip: { height: px(56), paddingHorizontal: px(22), borderRadius: px(28), backgroundColor: 'rgba(103,216,239,0.14)', borderColor: 'rgba(103,216,239,0.5)' },
+  link: { backgroundColor: 'transparent', borderColor: 'transparent' },
   focused: { borderColor: colors.focusRing, backgroundColor: colors.surfaceFocused },
   label: { color: colors.text, fontSize: type.body, fontWeight: '700' },
   labelActive: { color: colors.accent },

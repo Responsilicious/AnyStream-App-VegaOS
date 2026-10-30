@@ -19,6 +19,10 @@ interface Props {
   accessibilityHint?: string;
 }
 
+function isSet(value: string | undefined): boolean {
+  return !!value && !value.startsWith('Any');
+}
+
 /**
  * One row of the filter drawer. Focus is the white ring and nothing else; selection is the cyan mark and the
  * word in its spoken state, so the two never look alike.
@@ -47,24 +51,39 @@ export function OptionRow({ label, onPress, kind, selected, value, help, preferr
           {selected ? <Text style={styles.checkMark}>✓</Text> : null}
         </View>
       ) : null}
-      <View style={styles.text}>
-        <Text style={[styles.label, selected && styles.labelSelected]} numberOfLines={2}>
-          {label}
-        </Text>
-        {help ? (
-          <Text style={styles.help} numberOfLines={2}>
-            {help}
-          </Text>
-        ) : null}
-      </View>
       {kind === 'field' ? (
         <>
-          <Text style={[styles.value, value && value !== 'Any' && value !== 'Any genre' ? styles.valueSet : null]} numberOfLines={1}>
-            {value}
-          </Text>
-          <Text style={styles.chevron}>›</Text>
+          <View style={styles.text}>
+            <Text style={styles.fieldLabel} numberOfLines={1}>
+              {label}
+            </Text>
+            <Text style={[styles.value, isSet(value) && styles.valueSet]} numberOfLines={1}>
+              {value}
+            </Text>
+            {help ? (
+              <Text style={styles.help} numberOfLines={2}>
+                {help}
+              </Text>
+            ) : null}
+          </View>
+          {/* A down-pointing chevron: the field opens a list. */}
+          <View style={styles.chevron} />
         </>
-      ) : null}
+      ) : (
+        <>
+          <View style={styles.text}>
+            <Text style={styles.label} numberOfLines={2}>
+              {label}
+            </Text>
+            {help ? (
+              <Text style={styles.help} numberOfLines={2}>
+                {help}
+              </Text>
+            ) : null}
+          </View>
+          {selected ? <Text style={styles.selectedWord}>Selected</Text> : null}
+        </>
+      )}
     </Pressable>
   );
 }
@@ -86,11 +105,22 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.45 },
   text: { flex: 1 },
   label: { color: colors.text, fontSize: px(28), fontWeight: '600' },
-  labelSelected: { color: colors.accent },
+  fieldLabel: { color: colors.textMuted, fontSize: type.body },
   help: { color: colors.textMuted, fontSize: type.body, marginTop: px(4) },
-  value: { color: colors.textMuted, fontSize: px(26), maxWidth: px(320), marginLeft: px(16) },
-  valueSet: { color: colors.accent, fontWeight: '700' },
-  chevron: { color: colors.textMuted, fontSize: px(40), marginLeft: px(12), lineHeight: px(44) },
+  value: { color: colors.text, fontSize: px(30), fontWeight: '600', marginTop: px(2) },
+  valueSet: { color: colors.accent },
+  selectedWord: { color: colors.accent, fontSize: type.body, fontWeight: '700', marginLeft: px(16) },
+  chevron: {
+    width: px(16),
+    height: px(16),
+    marginLeft: px(16),
+    marginRight: px(8),
+    marginTop: -px(8),
+    borderRightWidth: px(3),
+    borderBottomWidth: px(3),
+    borderColor: colors.textMuted,
+    transform: [{ rotate: '45deg' }],
+  },
   radio: {
     width: px(32),
     height: px(32),

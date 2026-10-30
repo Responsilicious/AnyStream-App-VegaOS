@@ -440,8 +440,8 @@ export function BrowseScreen({ provider, page, prefs, onOpen, memory, onOverlay 
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.safeMargin, paddingTop: px(8) },
-  titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: px(16), minHeight: px(64) },
-  title: { color: colors.text, fontSize: type.title, fontWeight: '800', marginRight: px(32) },
+  titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: px(12), minHeight: px(80) },
+  title: { color: colors.text, fontSize: px(64), fontWeight: '800', marginRight: px(32) },
   count: { color: colors.textMuted, fontSize: type.body, marginLeft: 'auto' },
   tabs: { flexDirection: 'row' },
   tab: { marginRight: spacing.gap, minHeight: px(56) },

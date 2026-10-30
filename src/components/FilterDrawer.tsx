@@ -6,6 +6,7 @@ import {
   activeFilterCount,
   applyLabel,
   genreLabel,
+  pageNoun,
   sameView,
   sortHelp,
   sortLabel,
@@ -190,20 +191,23 @@ export function FilterDrawer({ page, tab, caps, facets, applied, draft, draftCou
       <View style={[styles.panel, { width: s(800), paddingHorizontal: s(48), paddingTop: s(28), paddingBottom: s(54) }]}>
         <View style={styles.header}>
           <Text style={styles.title} accessibilityRole="header">
-            {nested ? nestedTitle : page === 'series' ? 'Filter and sort series' : 'Filter and sort movies'}
+            {nested ? nestedTitle : 'Filters & sort'}
           </Text>
-          {nested ? null : <FocusButton label="Close" onPress={onClose} style={styles.close} />}
+          {nested ? null : <CloseButton onPress={onClose} />}
         </View>
+        <Text style={styles.subtitle}>
+          {nested === 'genre'
+            ? draft.filters.genreKeys.length > 0
+              ? `${draft.filters.genreKeys.length} selected · shows titles in any of them`
+              : 'Choose one or more'
+            : nested
+            ? 'Choose one'
+            : tab === 'sort'
+            ? `Choose how your ${pageNoun(page)} are ordered.`
+            : `Changes apply when you select Show ${pageNoun(page)}.`}
+        </Text>
 
-        {nested ? (
-          <Text style={styles.subtitle}>
-            {nested === 'genre'
-              ? draft.filters.genreKeys.length > 0
-                ? `${draft.filters.genreKeys.length} selected · titles in any of them`
-                : 'Choose one or more'
-              : 'Choose one'}
-          </Text>
-        ) : (
+        {nested ? null : (
           <View style={styles.tabs} accessibilityRole="tablist">
             <Tab
               label={filterCount > 0 ? `Filters (${filterCount})` : 'Filters'}
@@ -229,13 +233,17 @@ export function FilterDrawer({ page, tab, caps, facets, applied, draft, draftCou
         </ScrollView>
 
         {error && !nested ? <Text style={styles.error}>{error}</Text> : null}
+        {!nested && filterCount > 0 ? (
+          <Text style={styles.selectedCount}>
+            {filterCount === 1 ? '1 filter selected' : `${filterCount} filters selected`}
+          </Text>
+        ) : null}
 
         <View style={styles.footer}>
           {nested ? (
             <FocusButton label="Done" primary onPress={closeNested} style={styles.footerMain} />
           ) : (
             <>
-              <FocusButton label="Reset all" disabled={pending || isDefault} onPress={() => onDraft(DEFAULT_VIEW)} style={styles.footerSide} />
               <FocusButton
                 label={pending ? 'Loading…' : applyLabel(draft, applied, page, draftCount)}
                 primary
@@ -243,16 +251,31 @@ export function FilterDrawer({ page, tab, caps, facets, applied, draft, draftCou
                 onPress={onApply}
                 style={styles.footerMain}
               />
+              <FocusButton label="Reset" disabled={pending || isDefault} onPress={() => onDraft(DEFAULT_VIEW)} style={styles.footerSide} />
             </>
           )}
+          <Text style={styles.backHint}>{nested ? 'Back · Keep choices' : 'Back · Cancel changes'}</Text>
         </View>
-        {!nested ? (
-          <Text style={styles.footnote}>
-            Reset all clears every filter and goes back to Title A–Z. Nothing changes until you apply.
-          </Text>
-        ) : null}
+        {!nested ? <Text style={styles.footnote}>Reset clears every filter and sets Title A–Z. Nothing changes until you apply.</Text> : null}
       </View>
     </View>
+  );
+}
+
+/** A plain × in the corner, as in the mockups, with the same white focus ring as every other control. */
+function CloseButton({ onPress }: { onPress: () => void }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <Pressable
+      focusable
+      accessibilityRole="button"
+      accessibilityLabel="Close without applying"
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onPress={onPress}
+      style={[styles.close, focused && styles.closeFocused]}>
+      <Text style={styles.closeMark}>×</Text>
+    </Pressable>
   );
 }
 
@@ -267,42 +290,61 @@ function Tab({ label, selected, onPress }: { label: string; selected: boolean; o
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       onPress={onPress}
-      style={[styles.tab, focused && styles.tabFocused]}>
+      style={[styles.tab, selected && styles.tabSelected, focused && styles.tabFocused]}>
       <Text style={[styles.tabLabel, selected && styles.tabLabelSelected]}>{label}</Text>
-      <View style={[styles.tabLine, selected && styles.tabLineSelected]} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row' },
-  scrim: { flex: 1, backgroundColor: 'rgba(5,8,14,0.6)' },
-  panel: { backgroundColor: '#101826', borderLeftWidth: px(2), borderLeftColor: colors.surfaceFocused },
+  // Transparent: the grid stays visible as in the mockups, but presses on it close the panel instead of reaching it.
+  scrim: { flex: 1 },
+  panel: { backgroundColor: '#0E1626', borderLeftWidth: px(2), borderLeftColor: colors.surface },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: px(72) },
-  title: { color: colors.text, fontSize: type.heading, fontWeight: '800', flex: 1 },
-  close: { marginLeft: px(16) },
-  subtitle: { color: colors.textMuted, fontSize: type.body, marginTop: px(8), marginBottom: px(16) },
-  tabs: { flexDirection: 'row', marginTop: px(12), marginBottom: px(16) },
-  tab: {
-    paddingHorizontal: px(24),
-    paddingTop: px(10),
-    paddingBottom: px(6),
-    marginRight: px(12),
-    borderRadius: px(10),
+  title: { color: colors.text, fontSize: px(46), fontWeight: '800', flex: 1 },
+  close: {
+    width: px(64),
+    height: px(64),
+    borderRadius: px(32),
     borderWidth: focus.borderWidth,
     borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: px(16),
   },
-  tabFocused: { borderColor: colors.focusRing, backgroundColor: colors.surface },
+  closeFocused: { borderColor: colors.focusRing, backgroundColor: colors.surface },
+  closeMark: { color: colors.accent, fontSize: px(52), lineHeight: px(58), fontWeight: '300' },
+  subtitle: { color: colors.accent, fontSize: px(26), marginTop: px(4), marginBottom: px(20) },
+  tabs: {
+    flexDirection: 'row',
+    marginBottom: px(20),
+    borderRadius: px(14),
+    borderWidth: px(2),
+    borderColor: colors.surfaceFocused,
+    padding: px(2),
+  },
+  tab: {
+    flex: 1,
+    height: px(60),
+    borderRadius: px(12),
+    borderWidth: focus.borderWidth,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabSelected: { backgroundColor: colors.accent },
+  tabFocused: { borderColor: colors.focusRing },
   tabLabel: { color: colors.textMuted, fontSize: px(28), fontWeight: '700' },
-  tabLabelSelected: { color: colors.text },
-  tabLine: { height: px(4), marginTop: px(6), borderRadius: px(2), backgroundColor: 'transparent' },
-  tabLineSelected: { backgroundColor: colors.accent },
+  tabLabelSelected: { color: colors.accentText },
   content: { flex: 1 },
   contentInner: { paddingVertical: px(6) },
   note: { color: colors.textMuted, fontSize: type.body, marginTop: px(8) },
   error: { color: colors.danger, fontSize: type.body, marginTop: px(12) },
-  footer: { flexDirection: 'row', marginTop: px(20) },
-  footerSide: { marginRight: px(16) },
-  footerMain: { flex: 1 },
-  footnote: { color: colors.textMuted, fontSize: type.caption, marginTop: px(12) },
+  selectedCount: { color: colors.accent, fontSize: px(26), fontWeight: '600', marginTop: px(12) },
+  footer: { flexDirection: 'row', alignItems: 'center', marginTop: px(16) },
+  footerMain: { minWidth: px(280) },
+  footerSide: { marginLeft: px(16) },
+  backHint: { color: colors.accent, fontSize: type.body, marginLeft: px(16), flexShrink: 1, textAlign: 'right', flex: 1 },
+  footnote: { color: colors.textMuted, fontSize: type.caption, marginTop: px(10) },
 });
