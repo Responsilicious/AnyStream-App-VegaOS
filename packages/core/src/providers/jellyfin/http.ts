@@ -29,6 +29,13 @@ const CERTIFICATE_FAILURE = /certificate|ssl|tls|handshake|trust anchor|self[- ]
 const defaultFetch: FetchLike = (url, init) => fetch(url, init) as unknown as Promise<ResponseLike>;
 
 /**
+ * Emby shares Jellyfin's API (Jellyfin forked from it), but reads the client header as `X-Emby-Authorization`
+ * and the token as `X-Emby-Token`. Jellyfin 10.11 turns those legacy headers off by default, so each server
+ * family gets its own.
+ */
+export type ApiDialect = 'jellyfin' | 'emby';
+
+/**
  * Minimal Jellyfin HTTP client: one place for the auth header, timeouts and error mapping.
  * Immutable: `withToken` returns a new client, so a session never mutates a shared one.
  */
@@ -38,10 +45,34 @@ export class JellyfinHttp {
     readonly device: DeviceInfo,
     readonly token?: string,
     private readonly fetchImpl: FetchLike = defaultFetch,
+    readonly dialect: ApiDialect = 'jellyfin',
   ) {}
 
   withToken(token: string): JellyfinHttp {
-    return new JellyfinHttp(this.baseUrl, this.device, token, this.fetchImpl);
+    return new JellyfinHttp(this.baseUrl, this.device, token, this.fetchImpl, this.dialect);
+  }
+
+  /** The same server at another address, e.g. its `/emby` API base. */
+  withBaseUrl(baseUrl: string): JellyfinHttp {
+    return new JellyfinHttp(baseUrl, this.device, this.token, this.fetchImpl, this.dialect);
+  }
+
+  /** Client, device and token headers in the form this server family expects. */
+  authHeaders(): Record<string, string> {
+    if (this.dialect === 'jellyfin') {
+      return { Authorization: this.authorizationHeader() };
+    }
+    const parts = [
+      `Client="${APP_NAME}"`,
+      `Device="${this.device.name}"`,
+      `DeviceId="${this.device.id}"`,
+      `Version="${this.device.version}"`,
+    ];
+    const headers: Record<string, string> = { 'X-Emby-Authorization': `Emby ${parts.join(', ')}` };
+    if (this.token) {
+      headers['X-Emby-Token'] = this.token;
+    }
+    return headers;
   }
 
   authorizationHeader(): string {
@@ -88,7 +119,7 @@ export class JellyfinHttp {
 
     const headers: Record<string, string> = {
       Accept: 'application/json',
-      Authorization: this.authorizationHeader(),
+      ...this.authHeaders(),
     };
     let body: string | undefined;
     if (options.body !== undefined) {

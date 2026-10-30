@@ -27,7 +27,7 @@ import {
   type RouteStack,
   type Section,
 } from './navigation';
-import type { DeviceCapabilities, MediaItem, Session, StartChoice } from './providers/types';
+import { isJellyfinFamily, type DeviceCapabilities, type MediaItem, type ServerKind, type ServerRecord, type Session, type StartChoice } from './providers/types';
 import { AddServerFlow } from './screens/AddServerFlow';
 import { AuthFlow } from './screens/AuthFlow';
 import { ContinueScreen } from './screens/ContinueScreen';
@@ -68,7 +68,7 @@ const PROBE_BUDGET_MS = 2500;
 type Panel =
   | { name: 'switcher' }
   | { name: 'manager' }
-  | { name: 'add'; start?: { provider: 'jellyfin' | 'plex' } }
+  | { name: 'add'; start?: { provider: ServerKind; server?: ServerRecord; userName?: string } }
   | { name: 'profiles' };
 
 class SwitchRefused extends Error {
@@ -153,7 +153,10 @@ export const App = () => {
             setStartup('ok');
           } else if (result.status === 'auth-required' && view) {
             connections.markAuthExpired(view.account.id);
-            if (view.server.provider === 'jellyfin') {
+            if (view.server.provider === 'emby') {
+              // Emby signs in again through its own screens, on the same server and user.
+              setPanel({ name: 'add', start: { provider: 'emby', server: serverRecord(view), userName: view.connection.profileName } });
+            } else if (isJellyfinFamily(view.server.provider)) {
               store.forgetSignIn(view.server.nativeId);
               setAuthStart({ server: serverRecord(view), userName: view.connection.profileName, notice: EXPIRED_NOTICE });
             } else {
@@ -284,6 +287,7 @@ export const App = () => {
     (next: Session) => {
       const view = connections.addJellyfin(
         {
+          provider: next.server.kind === 'emby' ? 'emby' : 'jellyfin',
           serverNativeId: next.server.id,
           serverName: next.server.name,
           baseUrl: next.server.baseUrl,
@@ -381,7 +385,9 @@ export const App = () => {
       }}
       onAddServer={() => setPanel({ name: 'add' })}
       onSignInAgain={view => {
-        if (view.server.provider === 'jellyfin') {
+        if (view.server.provider === 'emby') {
+          setPanel({ name: 'add', start: { provider: 'emby', server: serverRecord(view), userName: view.connection.profileName } });
+        } else if (isJellyfinFamily(view.server.provider)) {
           setPanel(undefined);
           setAuthStart({ server: serverRecord(view), userName: view.connection.profileName, notice: EXPIRED_NOTICE });
         } else {
@@ -527,7 +533,7 @@ export const App = () => {
 export default App;
 
 /** The provider-facing record for a saved connection, for screens that still take a ServerRecord. */
-function serverRecord(view: ConnectionView) {
+function serverRecord(view: ConnectionView): ServerRecord {
   return { id: view.server.nativeId, kind: view.server.provider, name: view.displayName, baseUrl: view.server.endpoints[0] ?? '' };
 }
 

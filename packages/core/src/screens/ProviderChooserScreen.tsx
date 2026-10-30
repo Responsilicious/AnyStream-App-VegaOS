@@ -18,7 +18,7 @@ interface Props {
 }
 
 /**
- * Add a server (docs/design add-provider mockup): Jellyfin and Plex side by side, each with its own action,
+ * Add a server (docs/design add-provider mockup): Jellyfin, Emby and Plex side by side, each with its own action,
  * because they sign in differently. Adding a server here never changes the one currently in use. Provider
  * names are text: the marks in the mockup are illustrative and real logos need their owners' assets.
  */
@@ -36,6 +36,11 @@ export function ProviderChooserScreen({ active, onChoose, onManage, onBack }: Pr
           <Text style={styles.cardTitle}>Jellyfin</Text>
           <Text style={styles.cardDetail}>Enter a server address, then sign in or use Quick Connect.</Text>
           <AuthButton label="Connect Jellyfin" primary preferred onPress={() => onChoose('jellyfin')} />
+        </View>
+        <View style={[styles.card, styles.cardGap]}>
+          <Text style={styles.cardTitle}>Emby</Text>
+          <Text style={styles.cardDetail}>Enter your Emby server address, then sign in with your server account.</Text>
+          <AuthButton label="Connect Emby" onPress={() => onChoose('emby')} />
         </View>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Plex</Text>

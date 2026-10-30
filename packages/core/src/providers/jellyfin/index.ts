@@ -1,5 +1,6 @@
 import type {
   DeviceCapabilities,
+  ServerRecord,
   GenreTile,
   ItemPage,
   KindFilter,
@@ -45,14 +46,20 @@ import {
 import { countJellyfinLibrary, fetchLibraryFacets, jellyfinLibraryCapabilities, queryJellyfinLibrary } from './library';
 import { fetchVersions } from './versions';
 
+/**
+ * Jellyfin, and Emby through the same code: Jellyfin forked from Emby and the two still share the item,
+ * playback and progress API this provider uses. Only the headers differ (see `ApiDialect`).
+ */
 export class JellyfinProvider implements MediaProvider {
-  readonly kind = 'jellyfin' as const;
+  readonly kind: 'jellyfin' | 'emby';
 
   constructor(
     readonly session: Session,
     private readonly http: JellyfinHttp,
     private readonly caps: DeviceCapabilities,
-  ) {}
+  ) {
+    this.kind = http.dialect;
+  }
 
   getLibraries(): Promise<Library[]> {
     return fetchLibraries(this.http, this.session.userId);
@@ -161,12 +168,21 @@ export function createJellyfinProvider(
   caps: DeviceCapabilities,
   fetchImpl?: FetchLike,
 ): JellyfinProvider {
-  const http = new JellyfinHttp(session.server.baseUrl, device, session.accessToken, fetchImpl);
-  return new JellyfinProvider(session, http, caps);
+  return new JellyfinProvider(session, httpForServer(session.server, device, session.accessToken, fetchImpl), caps);
+}
+
+/** A client for a Jellyfin or Emby server, speaking its own dialect. */
+export function httpForServer(
+  server: Pick<ServerRecord, 'kind' | 'baseUrl'>,
+  device: DeviceInfo,
+  token?: string,
+  fetchImpl?: FetchLike,
+): JellyfinHttp {
+  return new JellyfinHttp(server.baseUrl, device, token, fetchImpl, server.kind === 'emby' ? 'emby' : 'jellyfin');
 }
 
 export { JellyfinHttp } from './http';
-export type { DeviceInfo, FetchLike } from './http';
-export { identifyServer, probeServer } from './probe';
+export type { ApiDialect, DeviceInfo, FetchLike } from './http';
+export { identifyServer, probeServer, serverProduct } from './probe';
 export { checkSession, QuickConnectFlow, signInWithPassword, type SessionCheck } from './auth';
 export { describeError, isJellyfinError, JellyfinError } from './errors';

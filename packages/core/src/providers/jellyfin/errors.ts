@@ -7,6 +7,7 @@ export type JellyfinErrorKind =
   | 'not-found'
   | 'server'
   | 'not-jellyfin'
+  | 'wrong-product'
   | 'quick-connect-disabled'
   | 'quick-connect-expired'
   | 'no-compatible-stream';
@@ -15,12 +16,15 @@ export type JellyfinErrorKind =
 export class JellyfinError extends Error {
   readonly kind: JellyfinErrorKind;
   readonly status?: number;
+  /** For 'wrong-product': the product that did answer. */
+  readonly detected?: 'jellyfin' | 'emby';
 
-  constructor(kind: JellyfinErrorKind, message: string, status?: number) {
+  constructor(kind: JellyfinErrorKind, message: string, status?: number, detected?: 'jellyfin' | 'emby') {
     super(message);
     this.name = 'JellyfinError';
     this.kind = kind;
     this.status = status;
+    this.detected = detected;
     Object.setPrototypeOf(this, JellyfinError.prototype);
   }
 }
@@ -50,7 +54,9 @@ export function describeError(e: unknown): string {
     case 'not-found':
       return 'That item was not found on the server.';
     case 'not-jellyfin':
-      return 'That address answered, but it does not look like a Jellyfin server.';
+      return 'That address answered, but it does not look like a media server.';
+    case 'wrong-product':
+      return e.detected === 'emby' ? 'That address is an Emby server.' : 'That address is a Jellyfin server.';
     case 'quick-connect-disabled':
       return 'Quick Connect is turned off on this server.';
     case 'quick-connect-expired':

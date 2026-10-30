@@ -5,10 +5,10 @@ import { AuthFrame, authStyles, HeroTitle, KeyHint, ServerIdentity, StatusLine }
 import { Glyph } from '../components/Glyph';
 import { KEYBOARD_PANEL_WIDTH, OnScreenKeyboard } from '../components/OnScreenKeyboard';
 import { TextField } from '../components/TextField';
-import { displayAddress, signInError, type ConnectStatus } from '../connect';
+import { displayAddress, familyName, signInError, type ConnectStatus } from '../connect';
 import { startEdit, type TextEdit } from '../keyboard';
 import { px } from '../layout';
-import { isJellyfinError, JellyfinHttp, signInWithPassword, type DeviceInfo } from '../providers/jellyfin';
+import { httpForServer, isJellyfinError, signInWithPassword, type DeviceInfo } from '../providers/jellyfin';
 import type { ServerRecord, Session } from '../providers/types';
 import { colors, focus, type } from '../theme';
 import { useBack } from '../useBack';
@@ -24,6 +24,9 @@ interface Props {
   onSignedIn: (session: Session) => void;
   onQuickConnect: () => void;
   onChangeServer: () => void;
+  /** Back to the server's user list (Emby, when it shows one). */
+  onChooseUser?: () => void;
+  onChangeProvider?: () => void;
   onBack: () => void;
 }
 
@@ -43,8 +46,13 @@ export function SignInScreen({
   onSignedIn,
   onQuickConnect,
   onChangeServer,
+  onChooseUser,
+  onChangeProvider,
   onBack,
 }: Props) {
+  // Jellyfin and Emby sign in the same way; only the words and the request headers differ.
+  const family = server.kind === 'emby' ? 'emby' : 'jellyfin';
+  const product = familyName(family);
   const [username, setUsername] = useState<TextEdit>(() => startEdit(initialUserName ?? ''));
   const [password, setPassword] = useState<TextEdit>(() => startEdit(''));
   const [editing, setEditing] = useState<Field | null>(null);
@@ -78,7 +86,7 @@ export function SignInScreen({
     setStatus({ tone: 'busy', title: 'Signing in…' });
     try {
       // Exactly as typed: credentials keep their case, punctuation and spaces.
-      const session = await signInWithPassword(new JellyfinHttp(server.baseUrl, device), server, username.text, password.text, controller.signal);
+      const session = await signInWithPassword(httpForServer(server, device), server, username.text, password.text, controller.signal);
       setPassword(startEdit(''));
       onSignedIn(session);
     } catch (e) {
@@ -90,9 +98,9 @@ export function SignInScreen({
       if (isJellyfinError(e) && e.kind === 'unauthorized') {
         setPassword(startEdit(''));
       }
-      setStatus({ tone: 'error', title: signInError(e, server.name) });
+      setStatus({ tone: 'error', title: signInError(e, server.name, family) });
     }
-  }, [busy, device, onSignedIn, password.text, server, username.text]);
+  }, [busy, device, family, onSignedIn, password.text, server, username.text]);
 
   useBack(() => {
     if (editing) {
@@ -128,7 +136,7 @@ export function SignInScreen({
 
   return (
     <AuthFrame onBack={onBack} right={right}>
-      <HeroTitle>Sign in to Jellyfin</HeroTitle>
+      <HeroTitle>{`Sign in to ${product}`}</HeroTitle>
       <View style={styles.server}>
         <ServerIdentity name={server.name} address={address} />
         <View style={styles.divider} />
@@ -140,7 +148,7 @@ export function SignInScreen({
         label="Username"
         value={username.text}
         caret={username.caret}
-        placeholder="Your Jellyfin username"
+        placeholder={`Your ${product} username`}
         editing={editing === 'username'}
         preferred={!editing && returnTo === 'username'}
         onPress={() => open('username')}
@@ -167,8 +175,14 @@ export function SignInScreen({
         style={authStyles.stackGap}
       />
       {quickConnect && <AuthButton label="Use Quick Connect" icon="link" disabled={busy} onPress={onQuickConnect} />}
+      {onChooseUser || onChangeProvider ? (
+        <View style={styles.links}>
+          {onChooseUser ? <AuthButton label="Choose another user" link disabled={busy} onPress={onChooseUser} /> : <View />}
+          {onChangeProvider ? <AuthButton label="Change provider" link disabled={busy} onPress={onChangeProvider} /> : null}
+        </View>
+      ) : null}
       <View style={styles.footer}>
-        {status ? <StatusLine status={status} /> : <Text style={authStyles.note}>Use your account on this Jellyfin server.</Text>}
+        {status ? <StatusLine status={status} /> : <Text style={authStyles.note}>{`Use your account on this ${product} server.`}</Text>}
       </View>
     </AuthFrame>
   );
@@ -208,4 +222,5 @@ const styles = StyleSheet.create({
   toggleFocused: { borderColor: colors.focusRing },
   toggleLabel: { color: colors.text, fontSize: type.card, marginLeft: px(14) },
   footer: { marginTop: px(20) },
+  links: { flexDirection: 'row', justifyContent: 'space-between' },
 });
