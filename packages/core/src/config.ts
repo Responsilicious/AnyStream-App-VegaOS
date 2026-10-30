@@ -38,6 +38,14 @@ export const SEEK_DEBOUNCE_MS = 350;
 /** Start-up check of a saved sign-in. Short, because Home waits for it. */
 export const SESSION_CHECK_TIMEOUT_MS = 6000;
 
+/**
+ * Cross-server search (docs/cross-server-search.md): servers asked at once, how long each may take before it
+ * shows as timed out, and how many recent queries keep their answers in memory. Tune on hardware.
+ */
+export const SEARCH_CONCURRENCY = 3;
+export const SEARCH_SOURCE_DEADLINE_MS = 8000;
+export const SEARCH_SESSION_ENTRIES = 12;
+
 /** Network search: Jellyfin's default port, how long each address gets, and how many are asked at once. */
 export const DISCOVERY_PORT = 8096;
 export const DISCOVERY_TIMEOUT_MS = 1500;

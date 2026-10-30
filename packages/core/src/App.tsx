@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, Image, StyleSheet, View } from 'react-native';
 import { EXPIRED_NOTICE, type AuthStart } from './authFlow';
-import { APP_VERSION, DEVICE_NAME, STORE_BUILD } from './config';
+import { APP_VERSION, DEVICE_NAME, SEARCH_CONCURRENCY, SEARCH_SESSION_ENTRIES, SEARCH_SOURCE_DEADLINE_MS, STORE_BUILD } from './config';
 import { describeWindow } from './layout';
 import { DEFAULT_CAPABILITIES } from './player/capabilities';
 import { createProvider } from './providers/create';
@@ -27,7 +27,12 @@ import {
   type RouteStack,
   type Section,
 } from './navigation';
-import { isJellyfinFamily, type DeviceCapabilities, type MediaItem, type ServerKind, type ServerRecord, type Session, type StartChoice } from './providers/types';
+import { isJellyfinFamily, type DeviceCapabilities, type MediaItem, type MediaProvider, type ServerKind, type ServerRecord, type Session, type StartChoice } from './providers/types';
+import { SEARCH_DEBOUNCE_MS } from './search';
+import { findAlternatives, SearchController } from './search/controller';
+import type { SearchSource, SourceHit } from './search/model';
+import { classifySearchError, copyChoices, defaultScope, searchSources, sourceLabels } from './search/sources';
+import { SourceMenu } from './components/SourceMenu';
 import { AddServerFlow } from './screens/AddServerFlow';
 import { AuthFlow } from './screens/AuthFlow';
 import { ContinueScreen } from './screens/ContinueScreen';
@@ -99,6 +104,12 @@ export const App = () => {
   // Focus goes back to the header's server pill after the switcher closes.
   const [pillFocus, setPillFocus] = useState(false);
   const [stack, setStack] = useState<RouteStack>(HOME);
+  const stackRef = useRef(stack);
+  stackRef.current = stack;
+  const activeRef = useRef(activeId);
+  // "Also on…" for the title page showing: copies of it on other servers, keyed by connection and item.
+  const [alsoOn, setAlsoOn] = useState<{ key: string; hits: SourceHit[] } | undefined>(undefined);
+  const [alsoOnMenu, setAlsoOnMenu] = useState<SourceHit[] | undefined>(undefined);
   // Start-up check of a saved sign-in (docs/sign-in.md): Home if it works, sign-in again if it expired,
   // Retry / Change server if the server does not answer. Runs alongside the codec probe, so it adds no wait.
   const [startup, setStartup] = useState<'checking' | 'retrying' | 'ok' | 'unavailable'>(() => (session ? 'checking' : 'ok'));
@@ -115,6 +126,54 @@ export const App = () => {
     browseMovies.current = undefined;
     browseSeries.current = undefined;
   }, []);
+
+  // Cross-server search (docs/cross-server-search.md). It lives here, above the screens, so the query, results and
+  // focused card survive a visit to a title page or a switch. Providers are built privately per source from the
+  // saved credentials; searching never activates a connection or changes which was used last.
+  const capsRef = useRef(caps);
+  capsRef.current = caps;
+  const searchProviders = useRef(new Map<string, MediaProvider>());
+  const providerFor = useCallback(
+    (source: SearchSource): MediaProvider | undefined => {
+      const next = source.signedIn ? connections.toSession(source.key) : undefined;
+      if (!next) {
+        return undefined;
+      }
+      const cacheKey = `${source.key}\u0000${source.revision}\u0000${next.server.baseUrl}`;
+      let found = searchProviders.current.get(cacheKey);
+      if (!found) {
+        found = createProvider(next, device, capsRef.current ?? DEFAULT_CAPABILITIES);
+        searchProviders.current.set(cacheKey, found);
+      }
+      return found;
+    },
+    [connections, device],
+  );
+  const searchController = useMemo(
+    () =>
+      new SearchController({
+        sources: () => searchSources(connections),
+        provider: providerFor,
+        activeKey: () => activeRef.current,
+        classify: classifySearchError,
+        recheck: async (source, signal) => {
+          await checkConnection(connections, source.key, device, signal);
+        },
+        debounceMs: SEARCH_DEBOUNCE_MS,
+        concurrency: SEARCH_CONCURRENCY,
+        deadlineMs: SEARCH_SOURCE_DEADLINE_MS,
+        sessionEntries: SEARCH_SESSION_ENTRIES,
+      }),
+    [connections, device, providerFor],
+  );
+  useEffect(() => () => searchController.dispose(), [searchController]);
+  // Saved connections may have changed behind a server panel (removed, renamed, signed out, profile switched).
+  useEffect(() => {
+    if (!panel) {
+      searchProviders.current.clear();
+      searchController.syncSources();
+    }
+  }, [panel, searchController]);
 
   useEffect(() => {
     // The first thing to look at when sizes seem wrong: what the platform says the window is.
@@ -197,17 +256,23 @@ export const App = () => {
     }
   }, [session, activeId, connections]);
 
-  /** Shows a connection that is already validated: its own Home, nothing carried over from the last one. */
+  /**
+   * Shows a connection that is already validated: its own Home (or the title a search switch opened), nothing
+   * carried over from the last one except search, whose answers are per server anyway.
+   */
   const show = useCallback(
-    (id: string | undefined) => {
+    (id: string | undefined, next: RouteStack = HOME) => {
+      activeRef.current = id;
       setActiveId(id);
       setSession(id ? connections.toSession(id) : undefined);
-      setStack(HOME);
+      setStack(next);
       homeFocus.current = undefined;
       forgetBrowse();
       setStartup('ok');
+      searchController.syncSources();
+      searchController.activeChanged();
     },
-    [connections, forgetBrowse],
+    [connections, forgetBrowse, searchController],
   );
 
   /**
@@ -276,6 +341,47 @@ export const App = () => {
     [coordinator, connections, show],
   );
 
+  /**
+   * Opens a copy that lives on another server: the same safe switch as the quick switcher, plus the chosen title
+   * fetched from its server before anything commits. Success opens that title there, over the section the user
+   * came from; any failure leaves the current server, search and screen exactly as they were.
+   */
+  const openElsewhere = useCallback(
+    async (hit: SourceHit): Promise<string | undefined> => {
+      const target = connections.get(hit.sourceKey);
+      if (!target) {
+        return 'That server is no longer saved on this TV.';
+      }
+      let prepared: MediaItem | undefined;
+      let reached = false;
+      const result = await coordinator.switchTo(hit.sourceKey, async next => {
+        reached = true;
+        prepared = await createProvider(next, device, caps ?? DEFAULT_CAPABILITIES).getItem(hit.ref.itemId);
+      });
+      if (result.outcome === 'switched' && prepared) {
+        const item = prepared;
+        // The other copies of this title, so its page can offer "Also on…" back to where the user was.
+        const group = searchController.snapshot().groups.find(g => g.hits.some(h => h.key === hit.key));
+        const others = group?.hits.filter(h => h.sourceKey !== hit.sourceKey) ?? [];
+        const pageId = item.kind === 'episode' && item.seriesId ? item.seriesId : item.id;
+        setAlsoOn({ key: `${hit.sourceKey}|${pageId}`, hits: others });
+        setAlsoOnMenu(undefined);
+        show(hit.sourceKey, openItem([{ name: 'library', section: activeSection(stackRef.current) }], item));
+        return undefined;
+      }
+      if (result.outcome === 'superseded') {
+        return 'The switch was cancelled. You’re still on your current server.';
+      }
+      const name = target.displayName;
+      if (result.outcome === 'failed' && reached) {
+        return `${hit.item.title} isn’t available on ${name} any more. You’re still on your current server.`;
+      }
+      const status = result.outcome === 'failed' && result.error instanceof SwitchRefused ? result.error.status : 'unavailable';
+      return `${name}: ${statusText(status)}. You’re still on your current server.`;
+    },
+    [connections, coordinator, device, caps, searchController, show],
+  );
+
   const closePanel = useCallback(() => {
     coordinator.cancel();
     setSwitchError(undefined);
@@ -311,6 +417,43 @@ export const App = () => {
   }, [activeId, connections, show]);
 
   const open = useCallback((item: MediaItem) => setStack(s => openItem(s, item)), []);
+  // A search card on the active server: its title page offers the other servers' copies it already knows.
+  const openFromSearch = useCallback(
+    (item: MediaItem, alternatives: SourceHit[]) => {
+      const pageId = item.kind === 'episode' && item.seriesId ? item.seriesId : item.id;
+      setAlsoOn({ key: `${activeRef.current}|${pageId}`, hits: alternatives });
+      setStack(s => openItem(s, item));
+    },
+    [],
+  );
+
+  // "Also on…" for a title page opened from Home or a library: ask the other servers, keeping only copies whose
+  // external ids agree. Nothing is shown while it runs, and a server that fails just isn't listed.
+  const topRoute = currentRoute(stack);
+  const pageItem = topRoute.name === 'detail' || topRoute.name === 'series' ? topRoute.item : undefined;
+  const pageKey = pageItem && activeId ? `${activeId}|${pageItem.id}` : undefined;
+  useEffect(() => {
+    if (!pageItem || !pageKey || !activeId || alsoOn?.key === pageKey) {
+      return undefined;
+    }
+    const sources = searchController.sources();
+    const from = sources.find(s => s.key === activeId);
+    if (!from || sources.filter(s => s.signedIn).length < 2) {
+      return undefined;
+    }
+    const controller = new AbortController();
+    findAlternatives(pageItem, from, sources, providerFor, { deadlineMs: SEARCH_SOURCE_DEADLINE_MS, signal: controller.signal }).then(
+      hits => {
+        if (!controller.signal.aborted) {
+          setAlsoOn({ key: pageKey, hits });
+        }
+      },
+      () => undefined,
+    );
+    return () => controller.abort();
+    // pageItem changes identity with every route; the key says when it is really another title.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageKey, activeId, searchController, providerFor]);
   const play = useCallback((item: MediaItem, choice?: StartChoice) => setStack(s => playItem(s, item, choice)), []);
   const back = useCallback(() => setStack(s => goBack(s)), []);
   const hidden = useMemo(
@@ -476,6 +619,32 @@ export const App = () => {
   };
 
   const route = currentRoute(stack);
+  const labels = sourceLabels(searchController.sources());
+  const alternatives = alsoOn && pageKey && alsoOn.key === pageKey ? alsoOn.hits : [];
+  const alsoOnButton =
+    alternatives.length > 0
+      ? {
+          label:
+            new Set(alternatives.map(h => h.sourceKey)).size === 1
+              ? `Also on ${labels.get(alternatives[0].sourceKey) ?? 'another server'}`
+              : `Also on ${new Set(alternatives.map(h => h.sourceKey)).size} servers`,
+          onPress: () => setAlsoOnMenu(alternatives),
+        }
+      : undefined;
+
+  if (alsoOnMenu && pageItem) {
+    return (
+      <SourceMenu
+        title={pageItem.title}
+        choices={copyChoices(alsoOnMenu, labels)}
+        mode="switch"
+        onOpen={() => undefined}
+        onSwitch={openElsewhere}
+        onClose={() => setAlsoOnMenu(undefined)}
+      />
+    );
+  }
+
   switch (route.name) {
     case 'player':
       return <PlayerScreen provider={provider} item={route.item} choice={route.choice} onExit={back} />;
@@ -488,6 +657,7 @@ export const App = () => {
           onPlay={play}
           onOpen={open}
           onBack={back}
+          alsoOn={alsoOnButton}
         />
       );
     case 'series':
@@ -499,6 +669,7 @@ export const App = () => {
           nav={{ active: activeSection(stack), profileName: provider.session.userName, backLabel: backLabel(stack), onSection: goSection }}
           onPlay={play}
           onBack={back}
+          alsoOn={alsoOnButton}
         />
       );
     case 'genre':
@@ -525,6 +696,13 @@ export const App = () => {
           onSwitchProfile={session.server.kind === 'plex' ? () => setPanel({ name: 'profiles' }) : undefined}
           libraryPrefs={libraryPrefs}
           browseMemory={browseMemory}
+          search={{
+            controller: searchController,
+            activeKey: activeId,
+            defaultScope: defaultScope(searchController.sources(), activeId),
+            onOpen: openFromSearch,
+            onSwitchOpen: openElsewhere,
+          }}
         />
       );
   }

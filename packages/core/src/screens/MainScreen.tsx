@@ -12,6 +12,8 @@ import { GenresScreen } from './GenresScreen';
 import { HomeScreen } from './HomeScreen';
 import { SearchScreen } from './SearchScreen';
 
+type SearchProps = Parameters<typeof SearchScreen>[0];
+
 interface Props {
   provider: MediaProvider;
   section: Section;
@@ -38,6 +40,8 @@ interface Props {
   libraryPrefs: LibraryPrefsStore;
   /** Each page's results and focus, kept while a title page is open. */
   browseMemory: Record<'movies' | 'series', { current: BrowseMemory | undefined }>;
+  /** Cross-server search: its controller lives in App so results survive a title page or a switch. */
+  search: SearchProps;
 }
 
 /** The top-level shell: the top bar, and whichever section is chosen beneath it. */
@@ -59,6 +63,7 @@ export function MainScreen({
   onSwitchProfile,
   libraryPrefs,
   browseMemory,
+  search,
 }: Props) {
   // The filter drawer is open: the header gives up focus so the remote stays inside the drawer.
   const [overlay, setOverlay] = useState(false);
@@ -111,7 +116,7 @@ export function MainScreen({
         <BrowseScreen provider={provider} page="series" prefs={libraryPrefs} onOpen={onOpen} memory={browseMemory.series} onOverlay={setOverlay} />
       )}
       {section === 'genres' && <GenresScreen provider={provider} onOpen={onOpen} onGenre={onGenre} />}
-      {section === 'search' && <SearchScreen provider={provider} onOpen={onOpen} />}
+      {section === 'search' && <SearchScreen {...search} />}
       {section === 'profile' && (
         <View style={styles.center}>
           <Text style={styles.heading}>{userName}</Text>

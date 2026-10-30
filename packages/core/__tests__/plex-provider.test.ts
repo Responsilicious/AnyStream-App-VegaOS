@@ -140,6 +140,19 @@ describe('Plex library', () => {
     expect(await plex.search('  ', 'all')).toEqual([]);
   });
 
+  it('asks search for external ids and passes the cancel signal on', async () => {
+    const withGuids = { ...MOVIE, guid: 'plex://movie/5d77', Guid: [{ id: 'imdb://tt0133093' }, { id: 'tmdb://603' }] };
+    const { plex, calls } = provider(() => ({ body: { MediaContainer: { Hub: [{ type: 'movie', Metadata: [withGuids] }] } } }));
+    const controller = new AbortController();
+    const [item] = await plex.search('film', 'all', controller.signal);
+    expect(calls[0].url).toContain('includeGuids=1');
+    expect(item.externalIds).toEqual({ imdb: 'tt0133093', tmdb: '603' });
+    const hung = provider(() => 'hang');
+    const pending = hung.plex.search('film', 'all', controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ kind: 'cancelled' });
+  });
+
   it('scrobbles and unscrobbles for watched state', async () => {
     const { plex, calls } = provider(() => ({ text: '' }));
     await plex.setPlayed('42', true);

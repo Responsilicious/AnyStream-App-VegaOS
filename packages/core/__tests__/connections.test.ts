@@ -223,6 +223,41 @@ describe('ContextCoordinator', () => {
     expect(committed).toEqual(['a']);
   });
 
+  it('prepares the destination title before committing, and commits nothing if it has gone', async () => {
+    const committed: string[] = [];
+    const c = new ContextCoordinator<string>({
+      check: async () => undefined,
+      prepare: async id => `data-${id}`,
+      commit: id => committed.push(id),
+    });
+    await c.switchTo('a');
+    const gone = await c.switchTo('b', async () => {
+      throw new Error('not found');
+    });
+    expect(gone.outcome).toBe('failed');
+    expect(c.current()?.connectionId).toBe('a');
+    expect(committed).toEqual(['a']);
+    const seen: string[] = [];
+    const ok = await c.switchTo('b', async data => {
+      seen.push(data);
+    });
+    expect(ok.outcome).toBe('switched');
+    expect(seen).toEqual(['data-b']);
+    expect(committed).toEqual(['a', 'b']);
+  });
+
+  it('a switch cancelled while its title is prepared changes nothing', async () => {
+    const title = deferred<void>();
+    const c = new ContextCoordinator<string>({ check: async () => undefined, prepare: async id => id });
+    await c.switchTo('a');
+    const pending = c.switchTo('b', () => title.promise);
+    await new Promise<void>(resolve => setImmediate(() => resolve()));
+    c.cancel();
+    title.resolve();
+    expect(await pending).toEqual({ outcome: 'superseded' });
+    expect(c.current()?.connectionId).toBe('a');
+  });
+
   it('a failed switch leaves the current context in place', async () => {
     const c = new ContextCoordinator<string>({
       check: async id => {

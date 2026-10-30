@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { px, useScale } from '../layout';
 import { colors, focus, type } from '../theme';
@@ -18,6 +18,8 @@ interface Props {
   /** Press and hold: opens the card menu. */
   onLongPress?: () => void;
   onFocus?: () => void;
+  /** Drawn over the artwork's bottom-left corner, such as the server chip on a search card. */
+  badge?: ReactNode;
 }
 
 /** A 320 × 180 landscape card (design pixels) with its title always beneath, as in docs/design.md section 4. */
@@ -32,6 +34,7 @@ export function WideCard({
   onPress,
   onLongPress,
   onFocus,
+  badge,
 }: Props) {
   const s = useScale();
   const [focused, setFocused] = useState(false);
@@ -62,6 +65,7 @@ export function WideCard({
             </Text>
           </View>
         )}
+        {badge}
         {progress > 0 && (
           <View style={styles.barTrack}>
             <View style={[styles.barFill, { width: `${Math.round(Math.min(1, progress) * 100)}%` }]} />

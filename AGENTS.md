@@ -107,6 +107,7 @@ providers/jellyfin/ http client, probe, auth, items, playback decision, DevicePr
 providers/emby/     Emby-only calls (public users); browsing and playback reuse providers/jellyfin (docs/emby.md)
 storage/            SessionStore over KeyValueStore (MMKV on device, MemoryStore fallback)
 library/            filter/sort state, saved views per server/viewer/library/page, query transaction (BrowseController)
+search/             cross-server search: external ids, matching, SearchController, sources/labels (docs/cross-server-search.md)
 util/               url candidates/query building, Jellyfin ticks, device id
 config.ts, theme.ts constants and the 10-foot UI palette/sizes
 ```
