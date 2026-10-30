@@ -17,6 +17,8 @@ interface Props {
   onServer?: () => void;
   /** Gives the server pill focus, e.g. when the switcher closes. */
   serverPreferred?: boolean;
+  /** A panel is open below (the library filter drawer): nothing here may take focus. */
+  inert?: boolean;
 }
 
 const ITEMS: Array<{ section: 'home' | 'movies' | 'series' | 'genres'; label: string }> = [
@@ -32,7 +34,7 @@ const LOGO = require('../assets/logo.png');
 const LOGO_ASPECT = 3;
 
 /** Logo, then Home, Movies, Series and Genres; Search and the profile avatar sit at the right (docs/design/home-mockup.png). */
-export function TopBar({ active, profileName, onSelect, preferred, serverName, onServer, serverPreferred }: Props) {
+export function TopBar({ active, profileName, onSelect, preferred, serverName, onServer, serverPreferred, inert }: Props) {
   const s = useScale();
   const initial = (profileName.trim()[0] ?? '?').toUpperCase();
   return (
@@ -50,16 +52,17 @@ export function TopBar({ active, profileName, onSelect, preferred, serverName, o
             label={entry.label}
             selected={active === entry.section}
             preferred={preferred && active === entry.section}
+            inert={inert}
             onPress={() => onSelect(entry.section)}
           />
         ))}
       </View>
       <View style={styles.right}>
-        {serverName && onServer ? <ServerPill name={serverName} preferred={serverPreferred} onPress={onServer} /> : null}
-        <IconItem label="Search" selected={active === 'search'} preferred={preferred && active === 'search'} onPress={() => onSelect('search')}>
+        {serverName && onServer ? <ServerPill name={serverName} preferred={serverPreferred} inert={inert} onPress={onServer} /> : null}
+        <IconItem label="Search" selected={active === 'search'} preferred={preferred && active === 'search'} inert={inert} onPress={() => onSelect('search')}>
           <SearchGlyph />
         </IconItem>
-        <IconItem label={profileName} selected={active === 'profile'} preferred={preferred && active === 'profile'} onPress={() => onSelect('profile')}>
+        <IconItem label={profileName} selected={active === 'profile'} preferred={preferred && active === 'profile'} inert={inert} onPress={() => onSelect('profile')}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initial}</Text>
           </View>
@@ -73,17 +76,19 @@ function TopBarItem({
   label,
   selected,
   preferred,
+  inert,
   onPress,
 }: {
   label: string;
   selected: boolean;
   preferred?: boolean;
+  inert?: boolean;
   onPress: () => void;
 }) {
   const [focused, setFocused] = useState(false);
   return (
     <Pressable
-      focusable
+      focusable={!inert}
       hasTVPreferredFocus={preferred}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -104,19 +109,21 @@ function IconItem({
   label,
   selected,
   preferred,
+  inert,
   onPress,
   children,
 }: {
   label: string;
   selected: boolean;
   preferred?: boolean;
+  inert?: boolean;
   onPress: () => void;
   children: ReactNode;
 }) {
   const [focused, setFocused] = useState(false);
   return (
     <Pressable
-      focusable
+      focusable={!inert}
       hasTVPreferredFocus={preferred}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -131,11 +138,11 @@ function IconItem({
 }
 
 /** The active server's name; Select opens the quick switcher. Always says which library is showing. */
-function ServerPill({ name, preferred, onPress }: { name: string; preferred?: boolean; onPress: () => void }) {
+function ServerPill({ name, preferred, inert, onPress }: { name: string; preferred?: boolean; inert?: boolean; onPress: () => void }) {
   const [focused, setFocused] = useState(false);
   return (
     <Pressable
-      focusable
+      focusable={!inert}
       hasTVPreferredFocus={preferred}
       accessibilityRole="button"
       accessibilityLabel={`Server: ${name}. Switch server`}

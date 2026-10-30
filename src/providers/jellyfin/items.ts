@@ -3,7 +3,7 @@ import { ticksToMs } from '../../util/ticks';
 import type { GenreTile, ItemPage, ItemQuery, KindFilter, Library, MediaItem } from '../types';
 import type { JellyfinHttp } from './http';
 
-interface JellyfinItem {
+export interface JellyfinItem {
   Id: string;
   Name: string;
   Type?: string;

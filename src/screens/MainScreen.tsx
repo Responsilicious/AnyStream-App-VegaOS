@@ -1,14 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BackHandler, StyleSheet, Text, View } from 'react-native';
 import { FocusButton } from '../components/FocusButton';
 import { TopBar } from '../components/TopBar';
 import type { Section } from '../navigation';
 import type { MediaItem, MediaProvider } from '../providers/types';
+import type { LibraryPrefsStore } from '../library/prefsStore';
 import type { HiddenContinueStore } from '../storage/hiddenStore';
 import { colors, spacing, type } from '../theme';
+import { BrowseScreen, type BrowseMemory } from './BrowseScreen';
 import { GenresScreen } from './GenresScreen';
 import { HomeScreen } from './HomeScreen';
-import { LibraryScreen } from './LibraryScreen';
 import { SearchScreen } from './SearchScreen';
 
 interface Props {
@@ -33,6 +34,10 @@ interface Props {
   serverPreferred?: boolean;
   /** Who's watching? for servers with profiles (Plex Home). Left out, the profile page has no switch. */
   onSwitchProfile?: () => void;
+  /** Saved filters and sort for the Movies and Series pages. */
+  libraryPrefs: LibraryPrefsStore;
+  /** Each page's results and focus, kept while a title page is open. */
+  browseMemory: Record<'movies' | 'series', { current: BrowseMemory | undefined }>;
 }
 
 /** The top-level shell: the top bar, and whichever section is chosen beneath it. */
@@ -52,7 +57,12 @@ export function MainScreen({
   onServer,
   serverPreferred,
   onSwitchProfile,
+  libraryPrefs,
+  browseMemory,
 }: Props) {
+  // The filter drawer is open: the header gives up focus so the remote stays inside the drawer.
+  const [overlay, setOverlay] = useState(false);
+
   // Back from any section other than Home returns to Home. On Home we do not claim the key,
   // so the platform takes the user out of the app.
   useEffect(() => {
@@ -80,6 +90,7 @@ export function MainScreen({
         serverName={serverName}
         onServer={onServer}
         serverPreferred={serverPreferred}
+        inert={overlay}
       />
       {section === 'home' && (
         <HomeScreen
@@ -93,8 +104,12 @@ export function MainScreen({
           onViewAllContinue={onViewAllContinue}
         />
       )}
-      {section === 'movies' && <LibraryScreen provider={provider} onOpen={onOpen} kind="movies" />}
-      {section === 'series' && <LibraryScreen provider={provider} onOpen={onOpen} kind="tvshows" />}
+      {section === 'movies' && (
+        <BrowseScreen provider={provider} page="movies" prefs={libraryPrefs} onOpen={onOpen} memory={browseMemory.movies} onOverlay={setOverlay} />
+      )}
+      {section === 'series' && (
+        <BrowseScreen provider={provider} page="series" prefs={libraryPrefs} onOpen={onOpen} memory={browseMemory.series} onOverlay={setOverlay} />
+      )}
       {section === 'genres' && <GenresScreen provider={provider} onOpen={onOpen} onGenre={onGenre} />}
       {section === 'search' && <SearchScreen provider={provider} onOpen={onOpen} />}
       {section === 'profile' && (

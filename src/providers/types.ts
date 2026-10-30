@@ -3,6 +3,20 @@
  * adding Plex (M4) means a new folder under providers/, not changes elsewhere.
  */
 
+import type { LibraryCapabilities, LibraryFacets, LibraryPage, LibraryView } from './libraryQuery';
+
+export type {
+  FilterState,
+  GenreFacet,
+  LibraryCapabilities,
+  LibraryFacets,
+  LibraryPage,
+  LibraryView,
+  SortPreset,
+  WatchStatus,
+  YearRange,
+} from './libraryQuery';
+
 export type ServerKind = 'jellyfin' | 'plex';
 
 export interface ServerRecord {
@@ -229,4 +243,12 @@ export interface MediaProvider extends PlaybackProvider {
   getByGenre(genre: string, filter: KindFilter, limit: number): Promise<MediaItem[]>;
   /** Titles matching what was typed. A blank term finds nothing. */
   search(term: string, filter: KindFilter): Promise<MediaItem[]>;
+  /** Which filters and sorts this library really supports (Movies and Series pages). */
+  getLibraryCapabilities(library: Library, signal?: AbortSignal): Promise<LibraryCapabilities>;
+  /** The genres this viewer can see in this library, with the server's own ids. */
+  getLibraryFacets(library: Library, signal?: AbortSignal): Promise<LibraryFacets>;
+  /** One page of the library, filtered and sorted by the server across the whole library. */
+  queryLibrary(library: Library, view: LibraryView, start: number, limit: number, signal?: AbortSignal): Promise<LibraryPage<MediaItem>>;
+  /** How many titles a filter matches, or null when the server cannot say exactly. */
+  countLibrary(library: Library, view: LibraryView, signal?: AbortSignal): Promise<number | null>;
 }

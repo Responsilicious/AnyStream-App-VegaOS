@@ -89,7 +89,8 @@ Run `npm run typecheck && npm test` before calling any change done.
 ```
 App.tsx  ── probes device codecs, loads session, picks a screen
   ├─ screens/AuthFlow          Welcome → Connect (network search) → Sign in or Quick Connect (docs/sign-in.md)
-  ├─ screens/LibraryScreen     libraries → poster grid
+  ├─ screens/BrowseScreen      Movies / Series: library tabs, Filters & Sort drawer, chips, paged grid (docs/library-filters.md)
+  ├─ screens/LibraryScreen     plain poster grid (genre pages)
   └─ screens/PlayerScreen      video surface, captions, remote keys
          └─ player/usePlayback (React binding)
                ├─ PlaybackController  one viewing: decision, progress reports, DirectPlay→Transcode retry, cleanup
@@ -98,6 +99,7 @@ App.tsx  ── probes device codecs, loads session, picks a screen
 providers/types.ts  provider-agnostic model (MediaProvider, PlaybackDecision, DeviceCapabilities)
 providers/jellyfin/ http client, probe, auth, items, playback decision, DeviceProfile, errors
 storage/            SessionStore over KeyValueStore (MMKV on device, MemoryStore fallback)
+library/            filter/sort state, saved views per server/viewer/library/page, query transaction (BrowseController)
 util/               url candidates/query building, Jellyfin ticks, device id
 config.ts, theme.ts constants and the 10-foot UI palette/sizes
 ```

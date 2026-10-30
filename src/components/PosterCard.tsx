@@ -9,10 +9,14 @@ interface Props {
   width: number;
   onPress: (item: MediaItem) => void;
   preferred?: boolean;
+  /** False while a panel covers the grid, so the remote cannot reach cards behind it. */
+  focusable?: boolean;
+  /** Reports the card that has focus, so the page can put focus back on it later. */
+  onFocused?: (item: MediaItem) => void;
 }
 
 /** A poster tile. Scales up and gains a ring when focused; shows a resume bar for partly watched titles. */
-export function PosterCard({ item, width, onPress, preferred }: Props) {
+export function PosterCard({ item, width, onPress, preferred, focusable = true, onFocused }: Props) {
   const [focused, setFocused] = useState(false);
   const height = Math.round(width * 1.5);
   const progress =
@@ -20,11 +24,14 @@ export function PosterCard({ item, width, onPress, preferred }: Props) {
 
   return (
     <Pressable
-      focusable
-      hasTVPreferredFocus={preferred}
+      focusable={focusable}
+      hasTVPreferredFocus={preferred && focusable}
       accessibilityRole="button"
       accessibilityLabel={item.year ? `${item.title}, ${item.year}` : item.title}
-      onFocus={() => setFocused(true)}
+      onFocus={() => {
+        setFocused(true);
+        onFocused?.(item);
+      }}
       onBlur={() => setFocused(false)}
       onPress={() => onPress(item)}
       style={[styles.card, { width }, focused && styles.focused]}>
