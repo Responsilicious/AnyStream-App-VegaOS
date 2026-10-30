@@ -52,14 +52,26 @@ describe('getPlaybackDecision', () => {
     expect(decision.url).toContain('deviceId=device-1');
   });
 
-  it('sends an MKV through the server, even when the server would allow direct play', async () => {
-    // On the stick an MKV of HEVC Main 10 and E-AC-3 stalled in URL mode without an error (29 Oct 2026).
+  it('direct plays an MKV the server allows', async () => {
     const mkv = { ...AVI_SOURCE, Container: 'mkv' };
     const { http } = httpWith(() => ({ body: { MediaSources: [mkv], PlaySessionId: 'ps3' } }));
     const decision = await getPlaybackDecision(http, 'u1', DEFAULT_CAPABILITIES, 'item2');
 
+    expect(decision.mode).toBe('url');
+    expect(decision.method).toBe('DirectPlay');
+    expect(decision.url).toContain('static=true');
+  });
+
+  it('streams an MKV over HLS when another audio track is chosen, letting the server copy the video', async () => {
+    const mkv = { ...AVI_SOURCE, Container: 'mkv' };
+    const { http, calls } = httpWith(() => ({ body: { MediaSources: [mkv], PlaySessionId: 'ps3' } }));
+    const decision = await getPlaybackDecision(http, 'u1', DEFAULT_CAPABILITIES, 'item2', { audioIndex: 2, mediaSourceId: 'src2' });
+
     expect(decision.mode).toBe('hls');
-    expect(decision.method).toBe('Transcode');
+    expect(calls[0].body.EnableDirectPlay).toBe(false);
+    expect(calls[0].body.EnableDirectStream).toBe(true);
+    expect(calls[0].body.AudioStreamIndex).toBe(2);
+    expect(calls[0].body.DeviceProfile.TranscodingProfiles[0]).toMatchObject({ Container: 'mp4', VideoCodec: 'h264,hevc' });
   });
 
   it('sends the device profile, user and start position to the server', async () => {
@@ -316,16 +328,30 @@ describe('toJellyfinProfile', () => {
   it('lists the codecs and containers the device was given', () => {
     const profile = toJellyfinProfile(DEFAULT_CAPABILITIES) as any;
     expect(profile.DirectPlayProfiles[0]).toMatchObject({
-      Container: 'mp4,m4v',
+      Container: 'mp4,m4v,mkv',
       VideoCodec: 'h264,hevc',
       AudioCodec: 'aac,ac3,eac3,mp3',
     });
+    // Fragmented MP4 segments, so the server can copy HEVC: Amazon's hls.js cannot read HEVC from MPEG-TS.
     expect(profile.TranscodingProfiles[0]).toMatchObject({
       Protocol: 'hls',
-      Container: 'ts',
-      VideoCodec: 'h264',
+      Container: 'mp4',
+      VideoCodec: 'h264,hevc',
       AudioCodec: 'aac',
     });
+  });
+
+  it('uses MPEG-TS segments for a player that reads them', () => {
+    const profile = toJellyfinProfile({ ...DEFAULT_CAPABILITIES, hlsContainer: 'ts', hlsAudioCodecs: ['aac', 'ac3', 'eac3'] }) as any;
+    expect(profile.TranscodingProfiles[0]).toMatchObject({ Container: 'ts', AudioCodec: 'aac,ac3,eac3' });
+  });
+
+  it('keeps 4K for HEVC while capping H.264 at 1080p', () => {
+    const profile = toJellyfinProfile(DEFAULT_CAPABILITIES) as any;
+    const width = (codec: string) =>
+      profile.CodecProfiles.find((p: any) => p.Codec === codec).Conditions.find((c: any) => c.Property === 'Width').Value;
+    expect(width('hevc')).toBe('3840');
+    expect(width('h264')).toBe('1920');
   });
 
   it('asks the server to burn in subtitles the captions view cannot draw', () => {

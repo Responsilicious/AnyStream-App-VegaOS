@@ -120,7 +120,12 @@ export interface DeviceCapabilities {
   audioCodecs: string[];
   /** Containers that URL mode (plain MP4/MP3 playback) is trusted to handle. */
   directPlayContainers: string[];
-  /** Codecs requested when the server transcodes to HLS. */
+  /**
+   * Segment container for the server's HLS stream. 'mp4' (fragmented MP4) reaches the decoder untouched, so the
+   * server can copy HEVC into it; 'ts' has to be demuxed by the player first.
+   */
+  hlsContainer: 'ts' | 'mp4';
+  /** Codecs requested when the server streams HLS, in order: the first is what the server encodes to. */
   hlsVideoCodecs: string[];
   hlsAudioCodecs: string[];
   maxWidth: number;

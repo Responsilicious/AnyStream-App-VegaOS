@@ -70,6 +70,9 @@ const MP4 = {
   Media: [{ id: 8, container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', duration: 1000, Part: [{ id: 80, key: '/library/parts/80/1/f.mp4', container: 'mp4', Stream: [] }] }],
 };
 
+/** An MKV whose DTS audio the TV cannot decode: the video fits, so it goes through Plex. */
+const DTS = { ...MOVIE, Media: [{ ...MOVIE.Media[0], audioCodec: 'dts' }] };
+
 function provider(handler: (call: Call) => any) {
   const { calls, fetchImpl } = fakeFetch(handler);
   return { calls, plex: createPlexProvider(PLEX_SESSION, DEVICE, DEFAULT_CAPABILITIES, fetchImpl) };
@@ -183,9 +186,16 @@ describe('Plex playback', () => {
     expect(decision.url).toBe(`${BASE}/library/parts/80/1/f.mp4?X-Plex-Token=server-token`);
   });
 
-  it('sends an MKV through the universal transcoder as HLS, after a decision check', async () => {
+  it('direct plays an MKV whose codecs the TV decodes', async () => {
+    const { plex } = provider(() => meta(MOVIE));
+    const decision = await plex.getPlayback('42');
+    expect(decision).toMatchObject({ mode: 'url', method: 'DirectPlay', mediaSourceId: '7' });
+    expect(decision.url).toBe(`${BASE}/library/parts/70/123/file.mkv?X-Plex-Token=server-token`);
+  });
+
+  it('sends an MKV it cannot direct play through the universal transcoder as HLS, after a decision check', async () => {
     const { plex, calls } = provider(call =>
-      call.url.includes('/decision') ? { body: { MediaContainer: { generalDecisionCode: 1001 } } } : meta(MOVIE),
+      call.url.includes('/decision') ? { body: { MediaContainer: { generalDecisionCode: 1001 } } } : meta(DTS),
     );
     const decision = await plex.getPlayback('42', { startMs: 61_500 });
     expect(decision).toMatchObject({ mode: 'hls', method: 'Transcode', mediaSourceId: '7', durationMs: 7_200_000 });
@@ -194,6 +204,8 @@ describe('Plex playback', () => {
     expect(decision.url).toContain('directPlay=0');
     expect(decision.url).toContain('X-Plex-Token=server-token');
     expect(decision.url).toContain(`session=${decision.playSessionId}`);
+    // The screen's size, so Plex has no reason to scale a 4K file down.
+    expect(decision.url).toContain('videoResolution=3840x2160');
     expect(calls.some(c => c.url.includes('/video/:/transcode/universal/decision'))).toBe(true);
   });
 
@@ -211,24 +223,24 @@ describe('Plex playback', () => {
   });
 
   it('turns a Plex refusal into a playback restriction, not a sign-in problem', async () => {
-    const refused = provider(call => (call.url.includes('/decision') ? { status: 403 } : meta(MOVIE)));
+    const refused = provider(call => (call.url.includes('/decision') ? { status: 403 } : meta(DTS)));
     const e1 = await refused.plex.getPlayback('42').catch(e => e);
     expect(e1).toMatchObject({ kind: 'playback-restricted' });
     expect(describeError(e1)).toMatch(/Plex Pass/);
-    const declined = provider(call => (call.url.includes('/decision') ? { body: { MediaContainer: { generalDecisionCode: 2000 } } } : meta(MOVIE)));
+    const declined = provider(call => (call.url.includes('/decision') ? { body: { MediaContainer: { generalDecisionCode: 2000 } } } : meta(DTS)));
     await expect(declined.plex.getPlayback('42')).rejects.toMatchObject({ kind: 'playback-restricted' });
   });
 
-  it('caps H.264 transcodes at 1080p 8-bit for the stick', () => {
+  it('lets Plex copy HEVC into fragmented MP4, and caps H.264 transcodes at 1080p 8-bit for the stick', () => {
     const extra = clientProfileExtra(DEFAULT_CAPABILITIES);
-    expect(extra).toContain('videoCodec=h264&audioCodec=aac');
+    expect(extra).toContain('protocol=hls&container=mp4&videoCodec=h264,hevc&audioCodec=aac');
     expect(extra).toContain('name=video.height&value=1080');
     expect(extra).toContain('name=video.bitDepth&value=8');
   });
 
   it('reports progress on the timeline and stops the transcode session', async () => {
     const { plex, calls } = provider(call =>
-      call.url.includes('/decision') ? { body: { MediaContainer: { generalDecisionCode: 1001 } } } : call.url.includes('/library/metadata') ? meta(MOVIE) : { text: '' },
+      call.url.includes('/decision') ? { body: { MediaContainer: { generalDecisionCode: 1001 } } } : call.url.includes('/library/metadata') ? meta(DTS) : { text: '' },
     );
     const decision = await plex.getPlayback('42');
     const item = { id: '42', title: 'Film', kind: 'movie' as const, resumeMs: 0, played: false };

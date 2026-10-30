@@ -52,7 +52,7 @@ export function toJellyfinProfile(
         Type: 'Video',
         Context: 'Streaming',
         Protocol: 'hls',
-        Container: 'ts',
+        Container: caps.hlsContainer,
         VideoCodec: caps.hlsVideoCodecs.join(','),
         AudioCodec: caps.hlsAudioCodecs.join(','),
         MaxAudioChannels: '6',

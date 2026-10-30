@@ -109,10 +109,14 @@ describe('probeCapabilities', () => {
     expect(caps.videoCodecs).toEqual(['h264']);
   });
 
-  it('leaves transcode targets and direct-play containers alone', async () => {
+  it('leaves HLS audio and direct-play containers alone', async () => {
     const caps = await probeCapabilities(supportsOnly('avc1'));
-    expect(caps.hlsVideoCodecs).toEqual(['h264']);
     expect(caps.hlsAudioCodecs).toEqual(['aac']);
-    expect(caps.directPlayContainers).toEqual(['mp4', 'm4v']);
+    expect(caps.directPlayContainers).toEqual(['mp4', 'm4v', 'mkv']);
+  });
+
+  it('stops the server copying video the device cannot decode, keeping H.264 as the encode target', async () => {
+    expect((await probeCapabilities(supportsOnly('avc1', 'mp4a'))).hlsVideoCodecs).toEqual(['h264']);
+    expect((await probeCapabilities(supportsOnly('hvc1', 'mp4a'))).hlsVideoCodecs).toEqual(['h264', 'hevc']);
   });
 });

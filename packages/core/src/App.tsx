@@ -185,6 +185,12 @@ export const App = () => {
     const finish = (value: DeviceCapabilities) => {
       if (!done) {
         done = true;
+        // What the server is told this TV plays: the first thing to check when a file transcodes unexpectedly.
+        console.log(
+          `AnyStream capabilities: video=${value.videoCodecs.join(',')} audio=${value.audioCodecs.join(',')} ` +
+            `direct=${value.directPlayContainers.join(',')} hls=${value.hlsContainer}:${value.hlsVideoCodecs.join(',')}/` +
+            `${value.hlsAudioCodecs.join(',')} max=${value.maxWidth}x${value.maxHeight}`,
+        );
         setCaps(value);
       }
     };

@@ -76,6 +76,7 @@ export class PlaybackController {
 
     try {
       this.decision = await this.deps.provider.getPlayback(item.id, { startMs: item.resumeMs, ...choice });
+      console.log(`playback: ${describeDecision(this.decision)}`);
       this.defaultAudio = this.decision.defaultAudioIndex ?? this.decision.selection?.audioIndex;
       this.announceTracks();
       await this.deps.engine.load(this.decision, item.resumeMs);
@@ -219,6 +220,7 @@ export class PlaybackController {
           mediaSourceId: this.decision?.mediaSourceId,
           ...this.trackOptions(this.decision?.selection),
         });
+        console.log(`playback: direct play failed (${failure.message}); ${describeDecision(this.decision)}`);
         this.announceTracks();
         await this.deps.engine.load(this.decision, resumeFrom);
         return;
@@ -274,4 +276,13 @@ export class PlaybackController {
       // ignored on purpose
     }
   }
+}
+
+/**
+ * How a stream is delivered, for the device log: mode, method and the URL with tokens removed. The URL's codec
+ * and TranscodeReasons parameters say why a file was not played directly.
+ */
+export function describeDecision(decision: PlaybackDecision): string {
+  const url = decision.url.replace(/([?&](?:api_key|X-Plex-Token|ApiKey)=)[^&]*/gi, '$1...');
+  return `${decision.mode} ${decision.method} ${url}`;
 }
