@@ -2,7 +2,7 @@ import { DEFAULT_CAPABILITIES } from '../src/player/capabilities';
 import { describeError } from '../src/providers/jellyfin';
 import { createPlexProvider } from '../src/providers/plex';
 import { clientProfileExtra } from '../src/providers/plex/playback';
-import type { Session } from '../src/providers/types';
+import type { DeviceCapabilities, Session } from '../src/providers/types';
 import { DEVICE, fakeFetch, type Call } from './helpers/fakes';
 
 const BASE = 'http://192.168.1.169:32400';
@@ -73,9 +73,12 @@ const MP4 = {
 /** An MKV whose DTS audio the TV cannot decode: the video fits, so it goes through Plex. */
 const DTS = { ...MOVIE, Media: [{ ...MOVIE.Media[0], audioCodec: 'dts' }] };
 
-function provider(handler: (call: Call) => any) {
+/** This test server is plain http, which Vega's URL mode refuses; most tests are about a player that opens it. */
+const OPENS_HTTP: DeviceCapabilities = { ...DEFAULT_CAPABILITIES, directPlayNeedsHttps: false };
+
+function provider(handler: (call: Call) => any, caps = OPENS_HTTP) {
   const { calls, fetchImpl } = fakeFetch(handler);
-  return { calls, plex: createPlexProvider(PLEX_SESSION, DEVICE, DEFAULT_CAPABILITIES, fetchImpl) };
+  return { calls, plex: createPlexProvider(PLEX_SESSION, DEVICE, caps, fetchImpl) };
 }
 
 const meta = (...items: object[]) => ({ body: { MediaContainer: { Metadata: items } } });
@@ -191,6 +194,14 @@ describe('Plex playback', () => {
     const decision = await plex.getPlayback('42');
     expect(decision).toMatchObject({ mode: 'url', method: 'DirectPlay', mediaSourceId: '7' });
     expect(decision.url).toBe(`${BASE}/library/parts/70/123/file.mkv?X-Plex-Token=server-token`);
+  });
+
+  it('streams over HLS instead when URL mode cannot open the server over http', async () => {
+    const { plex } = provider(
+      call => (call.url.includes('/decision') ? { body: { MediaContainer: { generalDecisionCode: 1001 } } } : meta(MOVIE)),
+      DEFAULT_CAPABILITIES,
+    );
+    expect(await plex.getPlayback('42')).toMatchObject({ mode: 'hls' });
   });
 
   it('sends an MKV it cannot direct play through the universal transcoder as HLS, after a decision check', async () => {

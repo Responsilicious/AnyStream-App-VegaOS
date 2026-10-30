@@ -1,3 +1,4 @@
+import { urlModeReaches } from '../../player/capabilities';
 import { buildQuery, joinUrl } from '../../util/url';
 import { msToTicks, ticksToMs } from '../../util/ticks';
 import type {
@@ -155,6 +156,7 @@ export async function getPlaybackDecision(
   // cannot do that, and direct play (a plain file) also cannot choose a different audio track.
   const subtitleOn = options.subtitleIndex !== undefined && options.subtitleIndex >= 0;
   const audioChosen = options.audioIndex !== undefined;
+  const directAllowed = !force && !subtitleOn && !audioChosen && urlModeReaches(caps, http.baseUrl);
 
   // Jellyfin only applies audio and subtitle choices when the request also names the media source they belong
   // to; without it a chosen subtitle came back not burned in (seen on the stick, 29 Oct 2026). The choice goes in
@@ -173,7 +175,7 @@ export async function getPlaybackDecision(
       MaxStreamingBitrate: maxBitrate,
       StartTimeTicks: msToTicks(options.startMs ?? 0),
       AutoOpenLiveStream: false,
-      EnableDirectPlay: !force && !subtitleOn && !audioChosen,
+      EnableDirectPlay: directAllowed,
       EnableDirectStream: !force && !subtitleOn,
       EnableTranscoding: true,
       ...(options.mediaSourceId ? { MediaSourceId: options.mediaSourceId } : {}),
@@ -194,7 +196,7 @@ export async function getPlaybackDecision(
     subtitleIndex: options.subtitleIndex ?? -1,
   };
 
-  if (!force && !subtitleOn && !audioChosen && source.SupportsDirectPlay && hasContainer(source, caps.directPlayContainers)) {
+  if (directAllowed && source.SupportsDirectPlay && hasContainer(source, caps.directPlayContainers)) {
     const query = buildQuery({
       static: true,
       mediaSourceId: source.Id,

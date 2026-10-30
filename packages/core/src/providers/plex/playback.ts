@@ -1,4 +1,5 @@
 import { APP_NAME } from '../../config';
+import { urlModeReaches } from '../../player/capabilities';
 import { buildQuery, joinUrl, type QueryValue } from '../../util/url';
 import type {
   DeviceCapabilities,
@@ -165,6 +166,7 @@ export async function getPlexPlayback(
     !force &&
     !subtitleOn &&
     !audioChosen &&
+    urlModeReaches(caps, http.baseUrl) &&
     caps.directPlayContainers.includes(container) &&
     caps.videoCodecs.includes(lower(media.videoCodec)) &&
     caps.audioCodecs.includes(lower(media.audioCodec));

@@ -11,6 +11,9 @@ export const DEFAULT_CAPABILITIES: DeviceCapabilities = {
   // An MKV of HEVC Main 10 and E-AC-3 stalled in URL mode on 29 Oct 2026. PlayerEngine's start-up watchdog now
   // turns such a stall into the HLS fallback, which keeps the video, so MKV is tried directly again.
   directPlayContainers: ['mp4', 'm4v', 'mkv'],
+  // The native player refused http://192.168.1.3:8096 ("Invalid or insecure URI scheme", 30 Oct 2026) and then
+  // sat until the watchdog fired. hls.js fetches over http fine, so such servers go straight to HLS.
+  directPlayNeedsHttps: true,
   // Amazon's hls.js (1.5.11) cannot demux HEVC or E-AC-3 from MPEG-TS ("Unsupported HEVC in M2TS"), but hands
   // fragmented MP4 straight to the decoder. H.264 first: when the server has to encode, that is the cheap target.
   hlsContainer: 'mp4',
@@ -21,6 +24,11 @@ export const DEFAULT_CAPABILITIES: DeviceCapabilities = {
   maxHeight: 2160,
   maxBitrate: 40000000,
 };
+
+/** Whether the device's URL mode can open a link on this server at all (see `directPlayNeedsHttps`). */
+export function urlModeReaches(caps: DeviceCapabilities, baseUrl: string): boolean {
+  return !caps.directPlayNeedsHttps || /^https:/i.test(baseUrl);
+}
 
 /** MIME + codec strings used to ask the device what it can decode. */
 export const VIDEO_PROBES: Record<string, string> = {

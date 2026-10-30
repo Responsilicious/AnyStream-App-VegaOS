@@ -62,6 +62,18 @@ describe('getPlaybackDecision', () => {
     expect(decision.url).toContain('static=true');
   });
 
+  it('skips direct play on a plain http server when URL mode needs https', async () => {
+    const fake = fakeFetch(() => ({ body: { MediaSources: [MP4_SOURCE], PlaySessionId: 'ps1' } }));
+    const http = new JellyfinHttp('http://192.168.1.3:8096', DEVICE, 'tok', fake.fetchImpl);
+    const decision = await getPlaybackDecision(http, 'u1', DEFAULT_CAPABILITIES, 'item1');
+
+    expect(decision.mode).toBe('hls');
+    expect(fake.calls[0].body.EnableDirectPlay).toBe(false);
+    expect(fake.calls[0].body.EnableDirectStream).toBe(true);
+    const opens = await getPlaybackDecision(http, 'u1', { ...DEFAULT_CAPABILITIES, directPlayNeedsHttps: false }, 'item1');
+    expect(opens.mode).toBe('url');
+  });
+
   it('streams an MKV over HLS when another audio track is chosen, letting the server copy the video', async () => {
     const mkv = { ...AVI_SOURCE, Container: 'mkv' };
     const { http, calls } = httpWith(() => ({ body: { MediaSources: [mkv], PlaySessionId: 'ps3' } }));
