@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Video, { type OnBufferData, type OnLoadData, type OnProgressData, type OnVideoErrorData, type VideoRef } from 'react-native-video';
 import type { VideoSurfaceProps } from '@anystream/core';
 import { elementStore, reportTime, type FireVideoElement } from './videoElement';
@@ -38,8 +38,13 @@ export function VideoSurface({ onSurfaceViewCreated, onSurfaceViewDestroyed }: V
     };
   }, [element]);
 
+  // Android only routes remote keys through the React root view while some view inside it has focus, and the
+  // player screen has nothing focusable while a film plays. This invisible sink keeps focus (and takes it back
+  // when the track menu closes), so useTVEventHandler keeps hearing the remote.
+  const focusSink = <View focusable hasTVPreferredFocus style={styles.focusSink} />;
+
   if (!element || !element.view.uri) {
-    return null;
+    return focusSink;
   }
   const { uri, paused } = element.view;
 
@@ -87,23 +92,30 @@ export function VideoSurface({ onSurfaceViewCreated, onSurfaceViewDestroyed }: V
   };
 
   return (
-    <Video
-      key={uri}
-      ref={ref}
-      style={StyleSheet.absoluteFill}
-      source={{ uri }}
-      paused={paused}
-      resizeMode="contain"
-      controls={false}
-      disableFocus
-      progressUpdateInterval={PROGRESS_INTERVAL_MS}
-      onLoad={onLoad}
-      onProgress={onProgress}
-      onBuffer={onBuffer}
-      onPlaybackStateChanged={onPlaybackStateChanged}
-      onSeek={() => element.dispatch('seeked')}
-      onEnd={onEnd}
-      onError={onError}
-    />
+    <>
+      <Video
+        key={uri}
+        ref={ref}
+        style={StyleSheet.absoluteFill}
+        source={{ uri }}
+        paused={paused}
+        resizeMode="contain"
+        controls={false}
+        disableFocus
+        progressUpdateInterval={PROGRESS_INTERVAL_MS}
+        onLoad={onLoad}
+        onProgress={onProgress}
+        onBuffer={onBuffer}
+        onPlaybackStateChanged={onPlaybackStateChanged}
+        onSeek={() => element.dispatch('seeked')}
+        onEnd={onEnd}
+        onError={onError}
+      />
+      {focusSink}
+    </>
   );
 }
+
+const styles = StyleSheet.create({
+  focusSink: { position: 'absolute', left: 0, top: 0, width: 1, height: 1, opacity: 0 },
+});
