@@ -6,11 +6,19 @@ buildinfo.json
 *.vpkg
 SHA256SUMS*
 
-# Amazon proprietary code: never commit (see src/hlsjsplayer/README.md)
-src/hlsjsplayer/*
-!src/hlsjsplayer/README.md
-src/PlayerBase.ts
-src/PlayerInterface.ts
+# Amazon proprietary code: never commit (see apps/vega/src/hlsjsplayer/README.md)
+apps/vega/src/hlsjsplayer/*
+!apps/vega/src/hlsjsplayer/README.md
+apps/vega/src/PlayerBase.ts
+apps/vega/src/PlayerInterface.ts
+# Fire OS (Android) build output
+apps/fireos/android/.gradle/
+apps/fireos/android/app/build/
+apps/fireos/android/build/
+*.apk
+*.aab
+*.keystore
+*.jks
 hls-rel*/
 *.tar.gz
 *.tgz

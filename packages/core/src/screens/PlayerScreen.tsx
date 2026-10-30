@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useTVEventHandler } from '@amazon-devices/react-native-kepler';
-import { KeplerCaptionsView, KeplerVideoSurfaceView } from '@amazon-devices/react-native-w3cmedia';
+import { platform, useTVEventHandler } from '../platform';
 import { FocusButton } from '../components/FocusButton';
 import { TrackMenu } from '../components/TrackMenu';
 import { usePlayback } from '../player/usePlayback';
@@ -22,6 +21,7 @@ interface Props {
 const OVERLAY_HIDE_MS = 5000;
 
 export function PlayerScreen({ provider, item, choice, onExit }: Props) {
+  const { VideoSurface } = platform();
   const playback = usePlayback(provider, item, choice);
   const [overlayVisible, setOverlayVisible] = useState(true);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -119,16 +119,12 @@ export function PlayerScreen({ provider, item, choice, onExit }: Props) {
 
   return (
     <View style={styles.screen}>
-      <KeplerVideoSurfaceView
-        style={StyleSheet.absoluteFill}
+      <VideoSurface
         onSurfaceViewCreated={playback.onSurfaceViewCreated}
         onSurfaceViewDestroyed={playback.onSurfaceViewDestroyed}
-      />
-      <KeplerCaptionsView
-        style={styles.captions}
-        show
         onCaptionViewCreated={playback.onCaptionViewCreated}
         onCaptionViewDestroyed={playback.onCaptionViewDestroyed}
+        captionsStyle={styles.captions}
       />
 
       {busy && !playback.error && (

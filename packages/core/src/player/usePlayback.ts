@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MediaItem, PlaybackProvider, StartChoice, TrackInfo, TrackSelection } from '../providers/types';
 import { SEEK_STEP_MS } from '../config';
-import { createPlayerEngine } from './createEngine';
+import { platform } from '../platform';
 import { PlaybackController } from './PlaybackController';
 import type { EngineState, PlayerEngine } from './PlayerEngine';
 
@@ -45,7 +45,7 @@ export function usePlayback(provider: PlaybackProvider, item: MediaItem, choice?
 
   useEffect(() => {
     let cancelled = false;
-    const engine = createPlayerEngine();
+    const engine = platform().createPlayerEngine();
     const controller = new PlaybackController({ provider, engine });
     engineRef.current = engine;
     controllerRef.current = controller;

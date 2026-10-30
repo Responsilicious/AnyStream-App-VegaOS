@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTVEventHandler } from '@amazon-devices/react-native-kepler';
+import { useTVEventHandler } from '../platform';
 import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CardMenu } from '../components/CardMenu';
 import { FeaturedPreview } from '../components/FeaturedPreview';

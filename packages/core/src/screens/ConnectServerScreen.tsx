@@ -13,7 +13,8 @@ import {
   serverFound,
   type ConnectStatus,
 } from '../connect';
-import { discoverServers, readLocalNetwork, subnetHosts, type FoundServer } from '../discovery';
+import { discoverServers, subnetHosts, type FoundServer } from '../discovery';
+import { platform } from '../platform';
 import { startEdit, type TextEdit } from '../keyboard';
 import { px } from '../layout';
 import {
@@ -107,7 +108,7 @@ export function ConnectServerScreen({ device, initialAddress, onConnected, onBac
     setFound(null);
     setPhase('searching');
     setStatus({ tone: 'busy', title: 'Searching this network…', detail: 'This takes up to half a minute.' });
-    const network = await readLocalNetwork();
+    const network = await platform().readLocalNetwork();
     const hosts = network ? subnetHosts(network) : [];
     if (controller.signal.aborted) {
       return;

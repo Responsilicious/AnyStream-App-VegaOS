@@ -14,8 +14,6 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "isolatedModules": true,
-    "noEmit": true,
-    "types": ["jest", "react-native"]
-  },
-  "include": ["src", "__tests__"]
+    "noEmit": true
+  }
 }

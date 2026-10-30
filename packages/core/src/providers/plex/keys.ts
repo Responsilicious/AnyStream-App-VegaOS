@@ -1,32 +1,29 @@
 import nacl from 'tweetnacl';
+import { hasPlatform, platform } from '../../platform';
 import { PlexError } from './errors';
 import { base64Url, base64UrlDecode, type Ed25519Signer } from './jwt';
 
 /** Fills `n` bytes from a cryptographically secure source. */
 export type RandomBytes = (n: number) => Uint8Array;
 
-declare const require: (name: string) => any;
-
 /**
- * Vega's native random source (keplercrypto WebCrypto). There is deliberately no Math.random fallback: a
- * guessable key would let anyone impersonate this TV to Plex, so without a secure source Plex linking is off.
+ * The device's secure random source: whatever the app shell registered, else a WebCrypto on globalThis. There is
+ * deliberately no Math.random fallback: a guessable key would let anyone impersonate this TV to Plex, so without
+ * a secure source Plex linking is off.
  */
 export function platformRandom(): RandomBytes {
-  let crypto: { getRandomValues(a: Uint8Array): Uint8Array } | undefined;
-  try {
-    const { WebCrypto } = require('@amazon-devices/keplercrypto');
-    crypto = new WebCrypto().crypto;
-  } catch {
-    const global = globalThis as { crypto?: { getRandomValues?(a: Uint8Array): Uint8Array } };
-    if (typeof global.crypto?.getRandomValues === 'function') {
-      crypto = global.crypto as { getRandomValues(a: Uint8Array): Uint8Array };
+  if (hasPlatform()) {
+    const fromPlatform = platform().randomBytes;
+    if (fromPlatform) {
+      return fromPlatform;
     }
   }
-  if (!crypto) {
-    throw new PlexError('no-signing-key', 'No secure random source on this device');
+  const global = globalThis as { crypto?: { getRandomValues?(a: Uint8Array): Uint8Array } };
+  if (typeof global.crypto?.getRandomValues === 'function') {
+    const source = global.crypto as { getRandomValues(a: Uint8Array): Uint8Array };
+    return n => source.getRandomValues(new Uint8Array(n));
   }
-  const source = crypto;
-  return n => source.getRandomValues(new Uint8Array(n));
+  throw new PlexError('no-signing-key', 'No secure random source on this device');
 }
 
 /** What gets saved: the key id and the 64-byte tweetnacl secret key (seed + public key), base64url. */

@@ -4,7 +4,6 @@ import { EXPIRED_NOTICE, type AuthStart } from './authFlow';
 import { APP_VERSION, DEVICE_NAME, STORE_BUILD } from './config';
 import { describeWindow } from './layout';
 import { DEFAULT_CAPABILITIES } from './player/capabilities';
-import { probeDeviceCapabilities } from './player/createEngine';
 import { createProvider } from './providers/create';
 import { originOf } from './providers/plex/http';
 import type { DeviceInfo } from './providers/jellyfin';
@@ -41,7 +40,7 @@ import { ProfilePickerScreen } from './screens/ProfilePickerScreen';
 import { QuickSwitcher } from './screens/QuickSwitcher';
 import { ServerManagerScreen } from './screens/ServerManagerScreen';
 import { SeriesPage } from './screens/SeriesPage';
-import { createDefaultStore } from './storage/keyValueStore';
+import { platform } from './platform';
 import { HiddenContinueStore } from './storage/hiddenStore';
 import { LibraryPrefsStore } from './library/prefsStore';
 import type { BrowseMemory } from './screens/BrowseScreen';
@@ -79,7 +78,7 @@ class SwitchRefused extends Error {
 }
 
 export const App = () => {
-  const kv = useMemo(() => createDefaultStore(), []);
+  const kv = useMemo(() => platform().createKeyValueStore(), []);
   // SessionStore keeps the install id; servers and sign-ins live in ConnectionStore (src/connections/).
   const store = useMemo(() => new SessionStore(kv), [kv]);
   const connections = useMemo(() => new ConnectionStore(kv), [kv]);
@@ -131,7 +130,7 @@ export const App = () => {
       }
     };
     const timer = setTimeout(() => finish(DEFAULT_CAPABILITIES), PROBE_BUDGET_MS);
-    probeDeviceCapabilities().then(finish, () => finish(DEFAULT_CAPABILITIES));
+    platform().probeDeviceCapabilities().then(finish, () => finish(DEFAULT_CAPABILITIES));
     return () => {
       done = true;
       clearTimeout(timer);

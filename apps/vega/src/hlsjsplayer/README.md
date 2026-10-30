@@ -22,7 +22,7 @@ hls.js, which Amazon distributes as a tarball rather than an npm package.
    (at the time of writing: `base-64`, `@xmldom/xmldom` or `xmldom`, and
    `fastestsmallesttextencoderdecoder`), then `npm install`.
 
-`src/player/createEngine.ts` already imports the same paths and call shapes the Amazon sample
+`apps/vega/src/platform/createEngine.ts` (which, in the generated project, becomes `src/platform/createEngine.ts`) already imports the same paths and call shapes the Amazon sample
 uses (`new HlsJsPlayer(videoPlayer)`, `load(content, autoplay)`, `unload()`, and each polyfill's
 `install()`), so nothing else changes.
 
