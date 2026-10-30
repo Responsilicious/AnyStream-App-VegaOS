@@ -1,4 +1,4 @@
-import { PlaybackController } from '../src/player/PlaybackController';
+import { describeDecision, PlaybackController } from '../src/player/PlaybackController';
 import { PlayerEngine } from '../src/player/PlayerEngine';
 import type { MediaItem, PlaybackDecision, PlaybackProvider } from '../src/providers/types';
 import { FakeElement, FakeLoader } from './helpers/fakes';
@@ -376,5 +376,17 @@ describe('PlaybackController', () => {
       await Promise.all([controller.changeTracks({ audioIndex: 2 }), controller.changeTracks({ subtitleIndex: 3 })]);
       expect(provider.getPlayback).toHaveBeenCalledTimes(2);
     });
+  });
+});
+
+describe('describeDecision', () => {
+  it('keeps tokens out of the device log', () => {
+    const line = describeDecision({
+      mode: 'hls',
+      method: 'Transcode',
+      url: 'https://s/videos/1/master.m3u8?VideoCodec=h264,hevc&api_key=secret&X-Plex-Token=secret2',
+      mediaSourceId: 'm',
+    });
+    expect(line).toBe('hls Transcode https://s/videos/1/master.m3u8?VideoCodec=h264,hevc&api_key=...&X-Plex-Token=...');
   });
 });

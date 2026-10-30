@@ -1,4 +1,5 @@
 import { APP_NAME } from '../../config';
+import { directPlayVideoCodecsFor, urlModeReaches } from '../../player/capabilities';
 import { buildQuery, joinUrl, type QueryValue } from '../../util/url';
 import type {
   DeviceCapabilities,
@@ -83,13 +84,16 @@ export async function fetchPlexVersions(http: PlexHttp, id: string): Promise<Med
 }
 
 /**
- * What the TV asks Plex to transcode to: H.264 and the HLS audio codecs in MPEG-TS, which Amazon's hls.js
- * plays. H.264 is capped at 1080p 8-bit, because the stick's H.264 decoder failed on 4K 10-bit (see AGENTS.md).
+ * What the TV asks Plex to stream: the device's HLS codecs in its HLS container, so Plex copies HEVC video
+ * instead of re-encoding it. H.264 is capped at 1080p 8-bit, because the stick's H.264 decoder failed on 4K
+ * 10-bit (see AGENTS.md); only an encode lands there.
  */
 export function clientProfileExtra(caps: DeviceCapabilities): string {
+  const video = caps.hlsVideoCodecs.join(',') || 'h264';
   const audio = caps.hlsAudioCodecs.join(',') || 'aac';
+  const container = caps.hlsContainer === 'mp4' ? 'mp4' : 'mpegts';
   return [
-    `add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts&videoCodec=h264&audioCodec=${audio})`,
+    `add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=${container}&videoCodec=${video}&audioCodec=${audio})`,
     'add-limitation(scope=videoCodec&scopeName=h264&type=upperBound&name=video.width&value=1920)',
     'add-limitation(scope=videoCodec&scopeName=h264&type=upperBound&name=video.height&value=1080)',
     'add-limitation(scope=videoCodec&scopeName=h264&type=upperBound&name=video.bitDepth&value=8)',
@@ -162,8 +166,9 @@ export async function getPlexPlayback(
     !force &&
     !subtitleOn &&
     !audioChosen &&
+    urlModeReaches(caps, http.baseUrl) &&
     caps.directPlayContainers.includes(container) &&
-    caps.videoCodecs.includes(lower(media.videoCodec)) &&
+    directPlayVideoCodecsFor(caps, container).includes(lower(media.videoCodec)) &&
     caps.audioCodecs.includes(lower(media.audioCodec));
   if (direct) {
     return {
@@ -189,7 +194,8 @@ export async function getPlexPlayback(
     subtitles: subtitleOn ? 'burn' : undefined,
     offset: Math.floor((options.startMs ?? 0) / 1000),
     maxVideoBitrate: Math.floor(maxBitrate / 1000),
-    videoResolution: '1920x1080',
+    // The screen, not 1080p: a fixed 1920x1080 made Plex scale every 4K file down, which needs a full encode.
+    videoResolution: `${caps.maxWidth}x${caps.maxHeight}`,
     session: sessionId,
     location: 'lan',
     'X-Plex-Session-Identifier': sessionId,

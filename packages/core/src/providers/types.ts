@@ -120,7 +120,19 @@ export interface DeviceCapabilities {
   audioCodecs: string[];
   /** Containers that URL mode (plain MP4/MP3 playback) is trusted to handle. */
   directPlayContainers: string[];
-  /** Codecs requested when the server transcodes to HLS. */
+  /** URL mode only opens https:// links, so a server reached over http:// streams through HLS instead. */
+  directPlayNeedsHttps?: boolean;
+  /**
+   * Video codecs URL mode decodes from a given container when fewer than `videoCodecs`: Vega's file player
+   * decodes HEVC from MP4 but not from MKV. A container not listed here takes every video codec.
+   */
+  directPlayVideoCodecs?: Record<string, string[]>;
+  /**
+   * Segment container for the server's HLS stream. 'mp4' (fragmented MP4) reaches the decoder untouched, so the
+   * server can copy HEVC into it; 'ts' has to be demuxed by the player first.
+   */
+  hlsContainer: 'ts' | 'mp4';
+  /** Codecs requested when the server streams HLS, in order: the first is what the server encodes to. */
   hlsVideoCodecs: string[];
   hlsAudioCodecs: string[];
   maxWidth: number;

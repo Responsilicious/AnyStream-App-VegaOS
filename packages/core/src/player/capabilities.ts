@@ -1,34 +1,47 @@
 import type { DeviceCapabilities } from '../providers/types';
 
 /**
- * Conservative baseline for a Fire TV Stick 4K Select: H.264 and HEVC in MP4 play directly;
- * everything else is transcoded to H.264 + AAC over HLS, which every Vega device handles.
- * Probing (below) can only remove codecs from this list, never add risky ones.
+ * Baseline for a Fire TV Stick 4K Select: H.264 and HEVC in MP4 or MKV play directly. Anything else goes over
+ * HLS, where the server copies H.264 or HEVC video when it can and converts only what does not fit, so a 4K HEVC
+ * file stays 4K HEVC. Probing (below) can only remove codecs from this list, never add risky ones.
  */
 export const DEFAULT_CAPABILITIES: DeviceCapabilities = {
   videoCodecs: ['h264', 'hevc'],
   audioCodecs: ['aac', 'ac3', 'eac3', 'mp3'],
-  // Not MKV: Amazon lists it for URL mode, but on the stick an MKV of HEVC Main 10 and E-AC-3 stalled without
-  // an error (29 Oct 2026). MKV goes through the server instead.
-  directPlayContainers: ['mp4', 'm4v'],
-  hlsVideoCodecs: ['h264'],
+  // An MKV of HEVC Main 10 and E-AC-3 stalled in URL mode on 29 Oct 2026. PlayerEngine's start-up watchdog now
+  // turns such a stall into the HLS fallback, which keeps the video, so MKV is tried directly again.
+  directPlayContainers: ['mp4', 'm4v', 'mkv'],
+  // The native player refused http://192.168.1.3:8096 ("Invalid or insecure URI scheme", 30 Oct 2026) and then
+  // sat until the watchdog fired. hls.js fetches over http fine, so such servers go straight to HLS.
+  directPlayNeedsHttps: true,
+  // Its HEVC decoder refuses what the MKV demuxer hands it ("kepler_viddec_hw_h265: no matching codec found",
+  // Aladdin, 30 Oct 2026), yet decodes the same HEVC from fragmented MP4, so HEVC MKVs go via the HLS remux.
+  directPlayVideoCodecs: { mkv: ['h264'] },
+  // Amazon's hls.js (1.5.11) cannot demux HEVC or E-AC-3 from MPEG-TS ("Unsupported HEVC in M2TS"), but hands
+  // fragmented MP4 straight to the decoder. H.264 first: when the server has to encode, that is the cheap target.
+  hlsContainer: 'mp4',
+  hlsVideoCodecs: ['h264', 'hevc'],
+  // isTypeSupported throws for ac-3 through MSE on the stick (see mseGuard.ts), so HLS audio is AAC.
   hlsAudioCodecs: ['aac'],
   maxWidth: 3840,
   maxHeight: 2160,
   maxBitrate: 40000000,
 };
 
+/** The video codecs URL mode decodes from `container` (see `directPlayVideoCodecs`). */
+export function directPlayVideoCodecsFor(caps: DeviceCapabilities, container: string): string[] {
+  return caps.directPlayVideoCodecs?.[container] ?? caps.videoCodecs;
+}
+
+/** Whether the device's URL mode can open a link on this server at all (see `directPlayNeedsHttps`). */
+export function urlModeReaches(caps: DeviceCapabilities, baseUrl: string): boolean {
+  return !caps.directPlayNeedsHttps || /^https:/i.test(baseUrl);
+}
+
 /** MIME + codec strings used to ask the device what it can decode. */
 export const VIDEO_PROBES: Record<string, string> = {
   h264: 'video/mp4; codecs="avc1.640028"',
   hevc: 'video/mp4; codecs="hvc1.1.6.L120.B0"',
-};
-
-export const AUDIO_PROBES: Record<string, string> = {
-  aac: 'audio/mp4; codecs="mp4a.40.2"',
-  ac3: 'audio/mp4; codecs="ac-3"',
-  eac3: 'audio/mp4; codecs="ec-3"',
-  mp3: 'audio/mpeg',
 };
 
 export interface DecodingProbeConfig {
@@ -49,7 +62,7 @@ async function supports(probe: DecodingInfoFn, config: DecodingProbeConfig): Pro
 }
 
 /**
- * Narrows the defaults to what this device reports it can decode.
+ * Narrows the default video codecs to what this device reports it can decode.
  * If the probe is unavailable, or would leave nothing for a media type, the defaults stand,
  * so a flaky probe can never produce a profile that rejects everything.
  */
@@ -74,26 +87,18 @@ export async function probeCapabilities(
       return { codec, ok };
     }),
   );
-  const audioResults = await Promise.all(
-    base.audioCodecs.map(async codec => {
-      const contentType = AUDIO_PROBES[codec];
-      if (!contentType) {
-        return { codec, ok: true };
-      }
-      const ok = await supports(decodingInfo, {
-        type: 'media-source',
-        audio: { contentType },
-      });
-      return { codec, ok };
-    }),
-  );
-
+  // The audio half of decodingInfo is not trusted: on the stick it said no to AAC, AC-3 and E-AC-3 and yes only
+  // to MP3 (30 Oct 2026), while the same device plays AAC and AC-3 fine, and the narrowed profile made the server
+  // transcode every MKV ("AudioCodecNotSupported"). The baseline audio list stands.
   const video = videoResults.filter(r => r.ok).map(r => r.codec);
-  const audio = audioResults.filter(r => r.ok).map(r => r.codec);
 
+  const videoCodecs = video.length > 0 ? video : base.videoCodecs;
+  // The server may copy any HLS video codec straight through, so one the device cannot decode leaves that list
+  // too. H.264 stays as the encode target whatever the probe says.
+  const hlsVideo = base.hlsVideoCodecs.filter(c => c === 'h264' || videoCodecs.includes(c));
   return {
     ...base,
-    videoCodecs: video.length > 0 ? video : base.videoCodecs,
-    audioCodecs: audio.length > 0 ? audio : base.audioCodecs,
+    videoCodecs,
+    hlsVideoCodecs: hlsVideo.length > 0 ? hlsVideo : base.hlsVideoCodecs,
   };
 }

@@ -82,10 +82,14 @@ describe('probeCapabilities', () => {
     expect(await probeCapabilities(undefined)).toEqual(DEFAULT_CAPABILITIES);
   });
 
-  it('drops codecs the device says it cannot decode', async () => {
+  it('drops video codecs the device says it cannot decode', async () => {
     const caps = await probeCapabilities(supportsOnly('avc1', 'mp4a', 'ac-3'));
     expect(caps.videoCodecs).toEqual(['h264']);
-    expect(caps.audioCodecs).toEqual(['aac', 'ac3']);
+  });
+
+  it('keeps the audio list whatever the probe says, since the stick wrongly rejects AAC', async () => {
+    const caps = await probeCapabilities(supportsOnly('avc1', 'hvc1', 'mpeg'));
+    expect(caps.audioCodecs).toEqual(DEFAULT_CAPABILITIES.audioCodecs);
   });
 
   it('never adds anything beyond the defaults', async () => {
@@ -96,7 +100,6 @@ describe('probeCapabilities', () => {
   it('keeps the defaults for a media type if the probe would leave nothing', async () => {
     const caps = await probeCapabilities(async () => ({ supported: false }));
     expect(caps.videoCodecs).toEqual(DEFAULT_CAPABILITIES.videoCodecs);
-    expect(caps.audioCodecs).toEqual(DEFAULT_CAPABILITIES.audioCodecs);
   });
 
   it('treats a throwing probe as "not supported"', async () => {
@@ -109,10 +112,14 @@ describe('probeCapabilities', () => {
     expect(caps.videoCodecs).toEqual(['h264']);
   });
 
-  it('leaves transcode targets and direct-play containers alone', async () => {
+  it('leaves HLS audio and direct-play containers alone', async () => {
     const caps = await probeCapabilities(supportsOnly('avc1'));
-    expect(caps.hlsVideoCodecs).toEqual(['h264']);
     expect(caps.hlsAudioCodecs).toEqual(['aac']);
-    expect(caps.directPlayContainers).toEqual(['mp4', 'm4v']);
+    expect(caps.directPlayContainers).toEqual(['mp4', 'm4v', 'mkv']);
+  });
+
+  it('stops the server copying video the device cannot decode, keeping H.264 as the encode target', async () => {
+    expect((await probeCapabilities(supportsOnly('avc1', 'mp4a'))).hlsVideoCodecs).toEqual(['h264']);
+    expect((await probeCapabilities(supportsOnly('hvc1', 'mp4a'))).hlsVideoCodecs).toEqual(['h264', 'hevc']);
   });
 });

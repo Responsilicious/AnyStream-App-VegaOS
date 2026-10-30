@@ -1,3 +1,4 @@
+import { directPlayVideoCodecsFor, urlModeReaches } from '../../player/capabilities';
 import { buildQuery, joinUrl } from '../../util/url';
 import { msToTicks, ticksToMs } from '../../util/ticks';
 import type {
@@ -131,9 +132,37 @@ export function buildTracks(source: MediaSource): TrackInfo | undefined {
   return audio.length > 0 || subtitles.length > 0 ? { audio, subtitles } : undefined;
 }
 
-function hasContainer(source: MediaSource, allowed: string[]): boolean {
-  const containers = (source.Container ?? '').toLowerCase().split(',');
-  return containers.some(c => allowed.includes(c.trim()));
+function firstSource(info: PlaybackInfoResponse): MediaSource {
+  const source = info.MediaSources?.[0];
+  if (info.ErrorCode || !source) {
+    throw new JellyfinError('no-compatible-stream', `No playable source: ${info.ErrorCode ?? 'empty'}`);
+  }
+  return source;
+}
+
+/** Whether a transcoding URL the server built burns in a subtitle track. */
+function hasSubtitleParam(url: string | undefined): boolean {
+  return url !== undefined && /[?&]SubtitleStreamIndex=\d/.test(url);
+}
+
+/** Reasons in a transcoding URL that mean the server re-encodes the picture rather than copying it. */
+const VIDEO_ENCODE_REASONS =
+  /^(Video\w+NotSupported|SubtitleCodecNotSupported|RefFramesNotSupported|AnamorphicVideoNotSupported|InterlacedVideoNotSupported|ContainerBitrateExceedsLimit|UnknownVideoStreamInfo)$/;
+
+export function encodesVideo(url: string | undefined): boolean {
+  const reasons = url !== undefined ? /[?&]TranscodeReasons=([^&]*)/i.exec(url)?.[1] : undefined;
+  return reasons !== undefined && decodeURIComponent(reasons).split(',').some(r => VIDEO_ENCODE_REASONS.test(r.trim()));
+}
+
+/** Whether the device's file player takes this source's container and video codec (see `directPlayVideoCodecs`). */
+function urlModePlays(source: MediaSource, caps: DeviceCapabilities): boolean {
+  const containers = (source.Container ?? '').toLowerCase().split(',').map(c => c.trim());
+  const container = containers.find(c => caps.directPlayContainers.includes(c));
+  if (container === undefined) {
+    return false;
+  }
+  const video = (source.MediaStreams ?? []).find(s => s.Type === 'Video');
+  return video?.Codec === undefined || directPlayVideoCodecsFor(caps, container).includes(video.Codec.toLowerCase());
 }
 
 /**
@@ -155,36 +184,51 @@ export async function getPlaybackDecision(
   // cannot do that, and direct play (a plain file) also cannot choose a different audio track.
   const subtitleOn = options.subtitleIndex !== undefined && options.subtitleIndex >= 0;
   const audioChosen = options.audioIndex !== undefined;
+  const directAllowed = !force && !subtitleOn && !audioChosen && urlModeReaches(caps, http.baseUrl);
+  const direct = (source: MediaSource) => directAllowed && source.SupportsDirectPlay === true && urlModePlays(source, caps);
 
   // Jellyfin only applies audio and subtitle choices when the request also names the media source they belong
-  // to; without it a chosen subtitle came back not burned in (seen on the stick, 29 Oct 2026). The choice goes in
-  // the query as well as the body, which the server reads first.
-  const info = await http.post<PlaybackInfoResponse>(`/Items/${itemId}/PlaybackInfo`, {
+  // to (StreamBuilder options are set only when MediaSourceId matches); without it a chosen subtitle came back
+  // not burned in (29 Oct 2026) and, worse, "no subtitles" (-1) was dropped and the server burned in the file's
+  // default track for every transcode (Aladdin, 30 Oct 2026). The choice goes in the query as well as the body,
+  // which the server reads first.
+  const playbackInfo = (mediaSourceId: string | undefined, capH264: boolean) => http.post<PlaybackInfoResponse>(`/Items/${itemId}/PlaybackInfo`, {
     query: {
       UserId: userId,
-      MediaSourceId: options.mediaSourceId,
+      MediaSourceId: mediaSourceId,
       AudioStreamIndex: audioChosen ? options.audioIndex : undefined,
       // -1 when none is chosen: otherwise the server may burn in a default image subtitle nobody asked for.
       SubtitleStreamIndex: options.subtitleIndex ?? -1,
     },
     body: {
       UserId: userId,
-      DeviceProfile: toJellyfinProfile({ ...caps, maxBitrate }, { burnInSubtitles: subtitleOn }),
+      DeviceProfile: toJellyfinProfile({ ...caps, maxBitrate }, { burnInSubtitles: subtitleOn, capH264 }),
       MaxStreamingBitrate: maxBitrate,
       StartTimeTicks: msToTicks(options.startMs ?? 0),
       AutoOpenLiveStream: false,
-      EnableDirectPlay: !force && !subtitleOn && !audioChosen,
+      EnableDirectPlay: directAllowed,
       EnableDirectStream: !force && !subtitleOn,
       EnableTranscoding: true,
-      ...(options.mediaSourceId ? { MediaSourceId: options.mediaSourceId } : {}),
+      ...(mediaSourceId ? { MediaSourceId: mediaSourceId } : {}),
       ...(audioChosen ? { AudioStreamIndex: options.audioIndex } : {}),
       SubtitleStreamIndex: options.subtitleIndex ?? -1,
     },
   });
 
-  const source = info.MediaSources?.[0];
-  if (info.ErrorCode || !source) {
-    throw new JellyfinError('no-compatible-stream', `No playable source: ${info.ErrorCode ?? 'empty'}`);
+  // A burned-in subtitle is a sure encode, so the H.264 cap goes in at once; otherwise the first answer says
+  // whether the server can copy the video, and only an encode is asked for again with the cap.
+  let capH264 = subtitleOn;
+  let info = await playbackInfo(options.mediaSourceId, capH264);
+  let source = firstSource(info);
+  if (!options.mediaSourceId && !subtitleOn && hasSubtitleParam(source.TranscodingUrl)) {
+    // The source id is only known from the answer, so ask again naming it; now the -1 counts.
+    info = await playbackInfo(source.Id, capH264);
+    source = firstSource(info);
+  }
+  if (!capH264 && !direct(source) && encodesVideo(source.TranscodingUrl)) {
+    capH264 = true;
+    info = await playbackInfo(options.mediaSourceId ?? source.Id, capH264);
+    source = firstSource(info);
   }
 
   const durationMs = source.RunTimeTicks ? ticksToMs(source.RunTimeTicks) : undefined;
@@ -194,7 +238,7 @@ export async function getPlaybackDecision(
     subtitleIndex: options.subtitleIndex ?? -1,
   };
 
-  if (!force && !subtitleOn && !audioChosen && source.SupportsDirectPlay && hasContainer(source, caps.directPlayContainers)) {
+  if (direct(source)) {
     const query = buildQuery({
       static: true,
       mediaSourceId: source.Id,
