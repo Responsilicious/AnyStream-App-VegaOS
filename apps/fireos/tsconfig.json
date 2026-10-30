@@ -1,0 +1,12 @@
+{
+  "extends": "@react-native/typescript-config",
+  "compilerOptions": {
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      "@anystream/core": ["../../packages/core/src/index.ts"]
+    }
+  },
+  "include": ["index.js", "src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["**/node_modules"]
+}

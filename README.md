@@ -85,6 +85,24 @@ Stick 4K Select unless marked otherwise.
 
 Babel and Metro configs come from the generated project; don't copy them from here.
 
+### Fire OS (Android TV) build
+
+`apps/fireos` is a react-native-tvos 0.83 project for Fire TV sticks running Fire OS 6 or 7 (Android
+7.1 and 9; `minSdkVersion` 24). It is not an npm workspace: it keeps its own `node_modules` so React
+Native resolves once, and Metro reaches `packages/core` through `metro.config.js`. Video plays through
+ExoPlayer (react-native-video), which handles HLS itself, so no hls.js is needed. Package id
+`com.anystream.anystream`, the same as the Vega app.
+
+```sh
+cd apps/fireos
+npm install --legacy-peer-deps
+npm run typecheck
+npm run build:debug         # needs JDK 17 and the Android SDK (ANDROID_HOME); APK in android/app/build/outputs/apk/debug/
+adb connect <stick-ip>:5555 && adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Not yet run on a Fire OS device; see AGENTS.md "Fire OS" for what is unverified.
+
 `apps/vega/vega-project/` holds reference copies of the working Vega project's `manifest.toml`, `app.json`,
 `package.json` and `index.js` (RN 0.83 template, package id `com.anystream.anystream`). Compare
 against them rather than copying blindly; `manifest.toml`'s `build-number` must be unique per
