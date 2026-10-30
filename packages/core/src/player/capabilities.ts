@@ -14,6 +14,9 @@ export const DEFAULT_CAPABILITIES: DeviceCapabilities = {
   // The native player refused http://192.168.1.3:8096 ("Invalid or insecure URI scheme", 30 Oct 2026) and then
   // sat until the watchdog fired. hls.js fetches over http fine, so such servers go straight to HLS.
   directPlayNeedsHttps: true,
+  // Its HEVC decoder refuses what the MKV demuxer hands it ("kepler_viddec_hw_h265: no matching codec found",
+  // Aladdin, 30 Oct 2026), yet decodes the same HEVC from fragmented MP4, so HEVC MKVs go via the HLS remux.
+  directPlayVideoCodecs: { mkv: ['h264'] },
   // Amazon's hls.js (1.5.11) cannot demux HEVC or E-AC-3 from MPEG-TS ("Unsupported HEVC in M2TS"), but hands
   // fragmented MP4 straight to the decoder. H.264 first: when the server has to encode, that is the cheap target.
   hlsContainer: 'mp4',
@@ -24,6 +27,11 @@ export const DEFAULT_CAPABILITIES: DeviceCapabilities = {
   maxHeight: 2160,
   maxBitrate: 40000000,
 };
+
+/** The video codecs URL mode decodes from `container` (see `directPlayVideoCodecs`). */
+export function directPlayVideoCodecsFor(caps: DeviceCapabilities, container: string): string[] {
+  return caps.directPlayVideoCodecs?.[container] ?? caps.videoCodecs;
+}
 
 /** Whether the device's URL mode can open a link on this server at all (see `directPlayNeedsHttps`). */
 export function urlModeReaches(caps: DeviceCapabilities, baseUrl: string): boolean {

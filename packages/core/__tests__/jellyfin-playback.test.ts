@@ -53,13 +53,51 @@ describe('getPlaybackDecision', () => {
   });
 
   it('direct plays an MKV the server allows', async () => {
-    const mkv = { ...AVI_SOURCE, Container: 'mkv' };
+    const mkv = { ...AVI_SOURCE, Container: 'mkv', MediaStreams: [{ Index: 0, Type: 'Video', Codec: 'h264' }] };
     const { http } = httpWith(() => ({ body: { MediaSources: [mkv], PlaySessionId: 'ps3' } }));
     const decision = await getPlaybackDecision(http, 'u1', DEFAULT_CAPABILITIES, 'item2');
 
     expect(decision.mode).toBe('url');
     expect(decision.method).toBe('DirectPlay');
     expect(decision.url).toContain('static=true');
+  });
+
+  it('sends an HEVC MKV through the server, since the file player only decodes H.264 from MKV', async () => {
+    const mkv = { ...AVI_SOURCE, Container: 'mkv', MediaStreams: [{ Index: 0, Type: 'Video', Codec: 'hevc' }] };
+    const { http, calls } = httpWith(() => ({ body: { MediaSources: [mkv], PlaySessionId: 'ps3' } }));
+    const decision = await getPlaybackDecision(http, 'u1', DEFAULT_CAPABILITIES, 'item2');
+
+    expect(decision.mode).toBe('hls');
+    expect(calls[0].body.DeviceProfile.DirectPlayProfiles).toEqual([
+      expect.objectContaining({ Container: 'mp4,m4v', VideoCodec: 'h264,hevc' }),
+      expect.objectContaining({ Container: 'mkv', VideoCodec: 'h264' }),
+    ]);
+  });
+
+  it('caps H.264 at 1080p only when the server has to encode the picture', async () => {
+    // A copy keeps 4K: the first request carries no H.264 width cap, and the answer copies the video.
+    const copied = { ...AVI_SOURCE, TranscodingUrl: '/videos/item2/master.m3u8?MediaSourceId=src2&TranscodeReasons=AudioCodecNotSupported' };
+    const one = httpWith(() => ({ body: { MediaSources: [copied] } }));
+    await getPlaybackDecision(one.http, 'u1', DEFAULT_CAPABILITIES, 'item2', { mediaSourceId: 'src2' });
+    const widthOf = (call: any, codec: string) =>
+      call.body.DeviceProfile.CodecProfiles.find((p: any) => p.Codec === codec).Conditions.find((c: any) => c.Property === 'Width').Value;
+    expect(one.calls).toHaveLength(1);
+    expect(widthOf(one.calls[0], 'h264')).toBe('3840');
+    expect(widthOf(one.calls[0], 'hevc')).toBe('3840');
+
+    // An encode is asked for again with the cap, so the H.264 the server makes stays at 1080p.
+    const encoded = { ...AVI_SOURCE, TranscodingUrl: '/videos/item2/master.m3u8?MediaSourceId=src2&TranscodeReasons=VideoCodecNotSupported' };
+    const two = httpWith(() => ({ body: { MediaSources: [encoded] } }));
+    await getPlaybackDecision(two.http, 'u1', DEFAULT_CAPABILITIES, 'item2', { mediaSourceId: 'src2' });
+    expect(two.calls).toHaveLength(2);
+    expect(widthOf(two.calls[0], 'h264')).toBe('3840');
+    expect(widthOf(two.calls[1], 'h264')).toBe('1920');
+
+    // A burned-in subtitle is an encode from the start.
+    const three = httpWith(() => ({ body: { MediaSources: [encoded] } }));
+    await getPlaybackDecision(three.http, 'u1', DEFAULT_CAPABILITIES, 'item2', { mediaSourceId: 'src2', subtitleIndex: 3 });
+    expect(three.calls).toHaveLength(1);
+    expect(widthOf(three.calls[0], 'h264')).toBe('1920');
   });
 
   it('skips direct play on a plain http server when URL mode needs https', async () => {
@@ -115,7 +153,7 @@ describe('getPlaybackDecision', () => {
 
   it('keeps H.264 at 1080p 8-bit, so a 4K file is not transcoded to 4K H.264', async () => {
     const { http, calls } = httpWith(() => ({ body: { MediaSources: [MP4_SOURCE] } }));
-    await getPlaybackDecision(http, 'u1', DEFAULT_CAPABILITIES, 'item1');
+    await getPlaybackDecision(http, 'u1', DEFAULT_CAPABILITIES, 'item1', { subtitleIndex: 2, mediaSourceId: 'src1' });
 
     const profiles = calls[0].body.DeviceProfile.CodecProfiles as Array<{ Codec: string; Conditions: any[] }>;
     const value = (codec: string, property: string) =>
@@ -353,11 +391,10 @@ describe('items', () => {
 describe('toJellyfinProfile', () => {
   it('lists the codecs and containers the device was given', () => {
     const profile = toJellyfinProfile(DEFAULT_CAPABILITIES) as any;
-    expect(profile.DirectPlayProfiles[0]).toMatchObject({
-      Container: 'mp4,m4v,mkv',
-      VideoCodec: 'h264,hevc',
-      AudioCodec: 'aac,ac3,eac3,mp3',
-    });
+    expect(profile.DirectPlayProfiles).toEqual([
+      { Type: 'Video', Container: 'mp4,m4v', VideoCodec: 'h264,hevc', AudioCodec: 'aac,ac3,eac3,mp3' },
+      { Type: 'Video', Container: 'mkv', VideoCodec: 'h264', AudioCodec: 'aac,ac3,eac3,mp3' },
+    ]);
     // Fragmented MP4 segments, so the server can copy HEVC: Amazon's hls.js cannot read HEVC from MPEG-TS.
     expect(profile.TranscodingProfiles[0]).toMatchObject({
       Protocol: 'hls',
@@ -373,7 +410,7 @@ describe('toJellyfinProfile', () => {
   });
 
   it('keeps 4K for HEVC while capping H.264 at 1080p', () => {
-    const profile = toJellyfinProfile(DEFAULT_CAPABILITIES) as any;
+    const profile = toJellyfinProfile(DEFAULT_CAPABILITIES, { capH264: true }) as any;
     const width = (codec: string) =>
       profile.CodecProfiles.find((p: any) => p.Codec === codec).Conditions.find((c: any) => c.Property === 'Width').Value;
     expect(width('hevc')).toBe('3840');

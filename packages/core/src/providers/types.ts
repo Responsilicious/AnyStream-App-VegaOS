@@ -123,6 +123,11 @@ export interface DeviceCapabilities {
   /** URL mode only opens https:// links, so a server reached over http:// streams through HLS instead. */
   directPlayNeedsHttps?: boolean;
   /**
+   * Video codecs URL mode decodes from a given container when fewer than `videoCodecs`: Vega's file player
+   * decodes HEVC from MP4 but not from MKV. A container not listed here takes every video codec.
+   */
+  directPlayVideoCodecs?: Record<string, string[]>;
+  /**
    * Segment container for the server's HLS stream. 'mp4' (fragmented MP4) reaches the decoder untouched, so the
    * server can copy HEVC into it; 'ts' has to be demuxed by the player first.
    */

@@ -189,11 +189,15 @@ describe('Plex playback', () => {
     expect(decision.url).toBe(`${BASE}/library/parts/80/1/f.mp4?X-Plex-Token=server-token`);
   });
 
-  it('direct plays an MKV whose codecs the TV decodes', async () => {
-    const { plex } = provider(() => meta(MOVIE));
+  it('direct plays an MKV whose codecs the TV decodes from MKV, and remuxes an HEVC one', async () => {
+    const h264 = { ...MOVIE, Media: [{ ...MOVIE.Media[0], videoCodec: 'h264' }] };
+    const { plex } = provider(() => meta(h264));
     const decision = await plex.getPlayback('42');
     expect(decision).toMatchObject({ mode: 'url', method: 'DirectPlay', mediaSourceId: '7' });
     expect(decision.url).toBe(`${BASE}/library/parts/70/123/file.mkv?X-Plex-Token=server-token`);
+
+    const hevc = provider(call => (call.url.includes('/decision') ? { body: { MediaContainer: { generalDecisionCode: 1001 } } } : meta(MOVIE)));
+    expect(await hevc.plex.getPlayback('42')).toMatchObject({ mode: 'hls' });
   });
 
   it('streams over HLS instead when URL mode cannot open the server over http', async () => {
