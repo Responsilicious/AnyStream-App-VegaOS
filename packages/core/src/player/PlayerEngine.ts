@@ -285,6 +285,9 @@ export class PlayerEngine {
     const duration = this.getDurationMs();
     const clamped = duration > 0 ? Math.min(Math.max(0, ms), Math.max(0, duration - 1000)) : Math.max(0, ms);
     this.element.currentTime = clamped / 1000;
+    // Show the target at once: the element only reports time again when playback resumes there, which on a
+    // held skip key can be seconds later, and until then the bar would still point at the old position.
+    this.listeners.forEach(l => l.onTime?.(clamped, duration));
   }
 
   seekBy(deltaMs: number): void {
