@@ -1,7 +1,7 @@
 # AnyStream
 
-A Netflix-style TV client for Jellyfin and Plex servers, built in React Native for Amazon Fire TV:
-Vega OS sticks today, Fire OS (Android) sticks next. Version 0.1.0.
+A Netflix-style TV client for Jellyfin, Emby and Plex servers, built in React Native for Amazon Fire TV:
+Vega OS sticks and Fire OS (Android) sticks. Version 0.1.0. See `CHANGELOG.md` for what changed.
 
 ## Layout
 
@@ -27,10 +27,14 @@ Stick 4K Select unless marked otherwise.
 
 - **Jellyfin:** add a server by address or find it on the local network, sign in with Quick
   Connect (nothing to type on a remote) or username and password.
+- **Emby** (new, 30 Oct; confirmed by Will on the Fire OS stick against Emby 4.10.2): add a
+  server by address or find it on the local network, pick a user from the server's list (or type
+  one), and sign in with username and password. Browsing, filters and playback reuse the
+  Jellyfin code with Emby's own sign-in headers. Details in `docs/emby.md`.
 - **Plex:** link an account with a code at plex.tv/link, pick a server, and switch Plex Home
   profiles.
-- **Several servers:** saved servers of either kind, a server manager, and quick switching
-  between them.
+- **Several servers:** saved servers of any kind, a server manager, and quick switching
+  between them. Adding a server from inside the app never switches to it until you choose to.
 - **Browsing:** Home rows with a featured preview, libraries, genres, search, and movie and series
   pages with seasons and episodes.
 - **Filters and sorting on Movies and Series** (new, 30 Oct; installed and launched on the stick,
@@ -44,8 +48,8 @@ Stick 4K Select unless marked otherwise.
   server transcode delivered as HLS. Audio and subtitle choice from an in-player menu, resume
   position, progress reporting, and a clean stop that ends the server transcode.
 - **Remote:** select toggles play and pause, left and right skip 10 s, back exits.
-- 23 unit test suites (400 tests) covering auth, connections, providers, playback decisions, the
-  player engine and controller, and library filters and sorting.
+- 24 unit test suites (428 tests) covering auth, connections, providers (Emby included), playback
+  decisions, the player engine and controller, and library filters and sorting.
 
 ## Known limitations
 
@@ -57,9 +61,13 @@ Stick 4K Select unless marked otherwise.
 - **Plex links with the legacy account token.** Plex's newer JWT linking is written but switched
   off (`PLEX_JWT_SIGN_IN` in `src/config.ts`), because Plex Media Server 1.43.5 refused the tokens
   it produced.
-- **Server discovery covers Jellyfin only**, by scanning the local /24 network on port 8096. Vega
-  apps can't use UDP, so Jellyfin's own discovery is not possible. Plex servers come from the
-  Plex account.
+- **Server discovery covers Jellyfin and Emby**, by scanning the local /24 network on port 8096.
+  Vega apps can't use UDP, so the servers' own discovery is not possible. Plex servers come from
+  the Plex account.
+- **Emby Connect and Emby profile PINs are not built.** Emby doesn't document its TV code
+  sign-in or how clients should apply profile PINs, so both stay off until they can be verified.
+  Emby servers are added by address with a server username and password. Emby has no Quick
+  Connect.
 - Some Plex servers' local `plex.direct` HTTPS addresses use a certificate chain the stick doesn't
   trust. Remote or other addresses are used instead.
 - **Filters:** series can't be filtered by "Not started" or "In progress" (neither server supports
@@ -101,7 +109,8 @@ npm run build:debug         # needs JDK 17 and the Android SDK (ANDROID_HOME); A
 adb connect <stick-ip>:5555 && adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Not yet run on a Fire OS device; see AGENTS.md "Fire OS" for what is unverified.
+Runs on a Fire TV Stick Lite (Fire OS 7.7, 30 Oct 2026): Jellyfin, Plex and Emby sign-in, switching and
+playback checked there. See AGENTS.md "Fire OS" for what is still unverified.
 
 `apps/vega/vega-project/` holds reference copies of the working Vega project's `manifest.toml`, `app.json`,
 `package.json` and `index.js` (RN 0.83 template, package id `com.anystream.anystream`). Compare
@@ -130,7 +139,8 @@ once the Amazon hls.js files above are in place.
 
 ## Layout
 
-- `src/providers`: the `MediaProvider` interface with Jellyfin and Plex implementations.
+- `src/providers`: the `MediaProvider` interface with Jellyfin and Plex implementations. Emby
+  (`providers/emby`) reuses the Jellyfin provider with Emby's headers.
 - `src/library`: Movies and Series filter and sort state, saved views, and the query transaction (`BrowseController`).
 - `src/connections`: saved servers and accounts (`ConnectionStore`), and switching between them.
 - `src/player`: `PlayerEngine` (surface, hls.js, URL mode), `PlaybackController` (progress, fallback), `usePlayback`.

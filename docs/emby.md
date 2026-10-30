@@ -1,6 +1,6 @@
 # Emby
 
-Implements the manual path of Will's Emby connection handoff (v2.0, 30 Oct 2026, screens EC01–EC10). Status: code and unit tests only. Nothing here has run against a real Emby server or on a stick yet.
+Implements the manual path of Will's Emby connection handoff (v2.0, 30 Oct 2026, screens EC01–EC10). Status: checked by Will on the Fire OS stick (Fire TV Stick Lite, Fire OS 7.7) against Emby 4.10.2 on 30 Oct 2026: sign-in, browsing, filters and playback. Not yet tried on a Vega stick.
 
 ## How it fits
 
@@ -42,9 +42,9 @@ Jellyfin keeps its own header because Jellyfin 10.11 turns the legacy `X-Emby-*`
 - **Profile PIN (EC10).** Emby's four-digit profile protection has no documented client API, and the handoff forbids inventing one. A protected profile is not unlocked by AnyStream. Whether the server enforces its PIN on a fresh device sign-in needs checking on a real server.
 - **Reconnect for a different user.** Sign in again on a saved Emby server with another user adds a second entry, as with Jellyfin.
 
-## Unverified until tried on a real Emby server
+## Still to check in detail
 
-- Whether Emby 4.8/4.9 answers `/System/Info/Public` at the root, under `/emby`, or both (the code handles all three).
+- Emby 4.10.2 answers `/System/Info/Public` and `/Users/Public` both at the root and under `/emby`, with no `ProductName` (checked 30 Oct 2026). Older versions behind a proxy may answer only one; the code handles either.
 - That Emby accepts the Jellyfin device profile in `PlaybackInfo` unchanged, returns a server-relative `TranscodingUrl` under the API base, and honours `SubtitleStreamIndex=-1`.
 - Filters: `GenreIds`, `Years`, `IsPlayed`, `Filters=IsResumable` and the sort fields (`SortName`, `DateCreated`, `PremiereDate`, `CommunityRating`, `Runtime`) on `/Users/{id}/Items`. Emby supports all of these in its API reference; Next Up's `DisableFirstEpisode`, `EnableResumable` and `EnableRewatching` are Jellyfin's and Emby may ignore them, so Up Next could include a series' first episode.
 - Progress reports (`/Sessions/Playing*`) and stopping a transcode (`DELETE /Videos/ActiveEncodings`).
