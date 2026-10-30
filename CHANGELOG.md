@@ -15,6 +15,7 @@ What changed in AnyStream, newest first. Dates are when the work landed on a bra
 
 ### Changed
 
+- **MKV and 4K playback** (30 Oct 2026). MKV direct plays again where the player can read it: always on Fire OS (ExoPlayer, including HEVC and Dolby audio), and H.264 MKVs over https on Vega. Anything else streams as a remux that keeps the original video: the app now asks for fragmented MP4 segments with HEVC allowed, so a 4K HEVC film stays 4K HEVC instead of being re-encoded to 1080p H.264, and only audio the TV cannot take is converted. Choosing another audio track keeps the video too. Fixes along the way: Vega's start-up codec probe wrongly reported that the stick plays no AAC or Dolby audio, which transcoded every MKV; Jellyfin burned in a title's default subtitle when none was chosen; Vega's file player refuses http:// links, so such servers now go straight to the remux instead of waiting 15 seconds; Plex no longer asks for 1080p on a 4K TV. Checked on both sticks by Will: Fire OS MKV direct play, Vega HEVC 10-bit remux, subtitles off.
 - Adding a single server from inside the app ends on "<Provider> server added", which names the server still in use and offers Switch to <server> or Keep current server (all providers).
 - Network search lists only servers of the kind being added.
 
