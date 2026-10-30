@@ -1,7 +1,19 @@
 # AnyStream
 
-A Netflix-style TV client for Jellyfin and Plex servers, built in React Native for Vega OS
-(Amazon Fire TV). Version 0.1.0.
+A Netflix-style TV client for Jellyfin and Plex servers, built in React Native for Amazon Fire TV:
+Vega OS sticks today, Fire OS (Android) sticks next. Version 0.1.0.
+
+## Layout
+
+```
+packages/core   shared app: providers, connections, library state, player logic, screens, components
+apps/vega       Vega OS shell: Amazon media stack + hls.js, MMKV, netmgr, keplercrypto; overlay for a generated Vega project
+apps/fireos     Fire OS (Android TV) shell: ExoPlayer, react-native-tvos (in progress)
+```
+
+The core never imports a native module. Each shell builds a `Platform` (player engine, video surface,
+storage, network, random source, remote key events) and registers it with `setPlatform()` before
+rendering `App`; see `packages/core/src/platform/index.ts`.
 
 ## Status (30 Oct 2026)
 
@@ -61,18 +73,37 @@ Stick 4K Select unless marked otherwise.
 1. Install the Vega SDK and CLI, then generate a project:
    `vega project generate -t helloWorld --name AnyStream` (pick your own package id).
 2. From this folder run:
-   `node scripts/apply-to-vega-project.mjs <path-to-generated-project>`
+   `npm run apply -- <path-to-generated-project>` (copies `apps/vega/src` to the project's `src/` and
+   installs `packages/core` as `node_modules/@anystream/core` there)
 3. In the generated project: `npm install`, then install the Vega packages your template pins
    (`@amazon-devices/react-native-w3cmedia`, `@amazon-devices/react-native-mmkv`,
    `@amazon-devices/keplerscript-netmgr-lib`, `@amazon-devices/keplercrypto`). See
-   `vega-project/package.json` for the versions used with React Native 0.83.
-4. Merge `manifest.additions.toml` into `manifest.toml`.
-5. Vendor Amazon's hls.js as described in `src/hlsjsplayer/README.md`.
+   `apps/vega/vega-project/package.json` for the versions used with React Native 0.83.
+4. Merge `apps/vega/manifest.additions.toml` into `manifest.toml`.
+5. Vendor Amazon's hls.js as described in `apps/vega/src/hlsjsplayer/README.md`.
 6. `npm run build:app`, then run on the Vega Virtual Device or a device.
 
 Babel and Metro configs come from the generated project; don't copy them from here.
 
-`vega-project/` holds reference copies of the working Vega project's `manifest.toml`, `app.json`,
+### Fire OS (Android TV) build
+
+`apps/fireos` is a react-native-tvos 0.83 project for Fire TV sticks running Fire OS 6 or 7 (Android
+7.1 and 9; `minSdkVersion` 24). It is not an npm workspace: it keeps its own `node_modules` so React
+Native resolves once, and Metro reaches `packages/core` through `metro.config.js`. Video plays through
+ExoPlayer (react-native-video), which handles HLS itself, so no hls.js is needed. Package id
+`com.anystream.anystream`, the same as the Vega app.
+
+```sh
+cd apps/fireos
+npm install --legacy-peer-deps
+npm run typecheck
+npm run build:debug         # needs JDK 17 and the Android SDK (ANDROID_HOME); APK in android/app/build/outputs/apk/debug/
+adb connect <stick-ip>:5555 && adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Not yet run on a Fire OS device; see AGENTS.md "Fire OS" for what is unverified.
+
+`apps/vega/vega-project/` holds reference copies of the working Vega project's `manifest.toml`, `app.json`,
 `package.json` and `index.js` (RN 0.83 template, package id `com.anystream.anystream`). Compare
 against them rather than copying blindly; `manifest.toml`'s `build-number` must be unique per
 uploaded VPKG.
@@ -82,13 +113,13 @@ uploaded VPKG.
 HLS playback uses Amazon's patched hls.js, which is Amazon proprietary and is deliberately left out
 of git (see `.gitignore`). A fresh clone is missing these files:
 
-- `src/hlsjsplayer/HlsJsPlayer.ts`, `src/hlsjsplayer/dist/`, `src/hlsjsplayer/polyfills/`
-- `src/PlayerBase.ts`, `src/PlayerInterface.ts`
+- `apps/vega/src/hlsjsplayer/HlsJsPlayer.ts`, `.../hlsjsplayer/dist/`, `.../hlsjsplayer/polyfills/`
+- `apps/vega/src/PlayerBase.ts`, `apps/vega/src/PlayerInterface.ts`
 
 To get them, sign in to the Amazon Developer portal, open the Vega documentation page
 **Media Player > HLS Player**, and download the hls.js patch package
 (`hls-rel-v1.5.11-r<N>.tar.gz`, latest revision; this app was built against `r1.7`). Then follow
-`src/hlsjsplayer/README.md` to build it and copy the files into place, including the small local
+`apps/vega/src/hlsjsplayer/README.md` to build it and copy the files into place, including the small local
 edits listed there. Until they are in place, type checking, tests that import the player, and
 builds will fail. Never commit them.
 

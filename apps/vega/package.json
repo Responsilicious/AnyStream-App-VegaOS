@@ -1,0 +1,18 @@
+{
+  "name": "@anystream/vega",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AnyStream for Vega OS: the device layer (Amazon media stack, MMKV, netmgr, keplercrypto) around @anystream/core, applied as an overlay onto a project made with `vega project generate`.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "apply": "node scripts/apply-to-vega-project.mjs"
+  },
+  "dependencies": {
+    "@anystream/core": "0.1.0"
+  },
+  "devDependencies": {
+    "@amazon-devices/react-native-kepler": "^2.1.0",
+    "@amazon-devices/react-native-w3cmedia": "2.3.2"
+  }
+}
