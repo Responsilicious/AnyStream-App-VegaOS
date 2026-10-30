@@ -2,7 +2,7 @@ import { ConnectionStore } from '../src/connections/connectionStore';
 import { ALL_SOURCES, type SearchSnapshot } from '../src/search/controller';
 import { makeHit, type SearchSource } from '../src/search/model';
 import { groupHits } from '../src/search/match';
-import { classifySearchError, copyChoices, defaultScope, searchSources, searchStatus, sourceCaption, sourceLabels } from '../src/search/sources';
+import { classifySearchError, cardBadge, copyChoices, defaultScope, providersLine, searchSources, searchStatus, sourceLabels } from '../src/search/sources';
 import { JellyfinError } from '../src/providers/jellyfin/errors';
 import { PlexError } from '../src/providers/plex/errors';
 import { MemoryStore } from '../src/storage/keyValueStore';
@@ -82,14 +82,19 @@ describe('card and status text', () => {
   const B = source('b', { label: 'Plexy', provider: 'plex' });
   const labels = sourceLabels([A, B]);
 
-  it('names one server and its kind, or counts several', () => {
+  it('badges one server by provider (marking the current one), or counts several', () => {
     const [single] = groupHits([makeHit(A, movie('1'), 0)], { query: 'm', sourceOrder: ['a', 'b'] });
-    expect(sourceCaption(single, labels, [A, B])).toBe('Jelly · Jellyfin');
+    expect(cardBadge(single, labels, [A, B], 'a')).toEqual({ kind: 'jellyfin', label: 'Jellyfin', current: true });
+    expect(cardBadge(single, labels, [A, B], 'b').current).toBe(false);
+    // Two Jellyfin servers: the provider alone would not say which.
+    const A2 = source('a2', { label: 'Office' });
+    expect(cardBadge(single, sourceLabels([A, A2, B]), [A, A2, B], 'b').label).toBe('Jelly');
+    expect(providersLine([A, B, source('c', { provider: 'emby', signedIn: false })])).toBe('Jellyfin  ·  Plex');
     const [both] = groupHits([makeHit(A, movie('1', { externalIds: { tmdb: '1' } }), 0), makeHit(B, movie('2', { externalIds: { tmdb: '1' } }), 0)], {
       query: 'm',
       sourceOrder: ['a', 'b'],
     });
-    expect(sourceCaption(both, labels, [A, B])).toBe('On 2 servers');
+    expect(cardBadge(both, labels, [A, B], 'a')).toEqual({ kind: 'many', label: 'On 2 servers', current: false });
   });
 
   it('numbers two copies on one server', () => {

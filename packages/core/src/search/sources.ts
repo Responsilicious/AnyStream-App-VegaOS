@@ -109,15 +109,29 @@ export function classifySearchError(error: unknown): FailureKind {
   return 'unavailable';
 }
 
-/** The source line under a card: one server's name and kind, or how many servers have it. */
-export function sourceCaption(group: SearchGroup, labels: Map<string, string>, sources: SearchSource[]): string {
+/** The chip over a card's artwork: "On 3 servers", or the one server's provider (or name, when two share a provider). */
+export interface CardBadge {
+  kind: SearchSource['provider'] | 'many';
+  label: string;
+  /** The single server it is on is the one being shown. */
+  current: boolean;
+}
+
+export function cardBadge(group: SearchGroup, labels: Map<string, string>, sources: SearchSource[], activeKey: string | undefined): CardBadge {
   const keys = [...new Set(group.hits.map(h => h.sourceKey))];
   if (keys.length > 1) {
-    return `On ${keys.length} servers`;
+    return { kind: 'many', label: `On ${keys.length} servers`, current: false };
   }
   const source = sources.find(s => s.key === keys[0]);
-  const label = labels.get(keys[0]) ?? source?.label ?? '';
-  return source && !label.includes(`(${providerName(source.provider)})`) ? `${label} · ${providerName(source.provider)}` : label;
+  const provider = source?.provider ?? group.display.ref.provider;
+  const sameProvider = sources.filter(s => s.provider === provider).length;
+  const label = sameProvider > 1 ? labels.get(keys[0]) ?? source?.label ?? providerName(provider) : providerName(provider);
+  return { kind: provider, label, current: keys[0] === activeKey };
+}
+
+/** The providers a search covers, for the line beside the heading: "Jellyfin · Plex · Emby". */
+export function providersLine(sources: SearchSource[]): string {
+  return [...new Set(sources.filter(s => s.signedIn).map(s => providerName(s.provider)))].join('  ·  ');
 }
 
 /** One line for a copy in the source or copy chooser. */

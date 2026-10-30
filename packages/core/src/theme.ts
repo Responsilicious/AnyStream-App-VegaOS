@@ -31,6 +31,17 @@ export const type = {
   caption: px(22),
 };
 
+/** Marks for each kind of server on search cards (docs/cross-server-search.md); shapes only, no brand artwork. */
+export const providerColors = {
+  plex: '#E5A00D',
+  jellyfin: '#AA5CC3',
+  emby: '#52B54B',
+  many: '#67D8EF',
+};
+
+/** The dark chip over artwork that names a card's server, readable on bright stills. */
+export const badgeBackground = 'rgba(11, 16, 27, 0.85)';
+
 export const focus = {
   borderWidth: px(4),
   /** Kept subtle so a focused card does not clip against its neighbours. */

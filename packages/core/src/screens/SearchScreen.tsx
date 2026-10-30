@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, FlatList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, BackHandler, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { FocusButton } from '../components/FocusButton';
+import { Glyph } from '../components/Glyph';
 import { KeyButton } from '../components/KeyButton';
+import { SourceBadge } from '../components/SourceBadge';
 import { SourceMenu, type SourceChoice } from '../components/SourceMenu';
 import { WideCard } from '../components/WideCard';
 import { px, useScale } from '../layout';
@@ -10,7 +12,7 @@ import { editQuery, KEY_ROWS, KIND_FILTERS, typeKey, type EditKey } from '../sea
 import { ALL_SOURCES, type SearchController, type SearchScope, type SearchSnapshot } from '../search/controller';
 import { findGroup, hitsOn } from '../search/match';
 import type { SearchGroup, SourceHit } from '../search/model';
-import { copyChoices, searchStatus, sourceCaption, sourceLabels } from '../search/sources';
+import { cardBadge, copyChoices, providersLine, searchStatus, sourceLabels } from '../search/sources';
 import { colors, focus, type } from '../theme';
 import { cardTitle, typeYearSubtitle } from '../util/format';
 
@@ -170,14 +172,15 @@ export function SearchScreen({ controller, activeKey, defaultScope, onOpen, onSw
   const resultsWidth = width - 2 * margin - panelWidth - s(48);
   const cardWidth = Math.floor((resultsWidth - (COLUMNS - 1) * gap) / COLUMNS) - 2 * focus.borderWidth;
   const restoreIndex = restore ? snapshot.groups.findIndex(g => g.key === restore) : -1;
-  const scopeLabel = scope === ALL_SOURCES ? 'All servers' : labels.get(scope) ?? 'One server';
+  const scopeLabel = scope === ALL_SOURCES ? `All servers (${sources.length})` : labels.get(scope) ?? 'One server';
+  const providers = providersLine(scope === ALL_SOURCES ? sources : sources.filter(src => src.key === scope));
   const loading = snapshot.pending > 0 && snapshot.groups.length === 0;
 
   return (
     <View style={[styles.screen, { paddingHorizontal: margin }]}>
       <View style={{ width: panelWidth }}>
         <Text style={styles.title}>Search</Text>
-        <Text style={styles.label}>{many ? 'Search your servers' : 'Search your library'}</Text>
+        <Text style={[styles.label, many && styles.labelAccent]}>{many ? 'Search all your servers' : 'Search your library'}</Text>
         <View style={styles.input}>
           <View style={styles.glyph}>
             <View style={styles.glyphLens} />
@@ -208,13 +211,23 @@ export function SearchScreen({ controller, activeKey, defaultScope, onOpen, onSw
           </View>
         </View>
 
-        <Text style={styles.hint}>{'‹  Back  ·  Leave search'}</Text>
+        <View style={styles.hintRow}>
+          <Glyph name="back" color={colors.textMuted} size={30} />
+          <Text style={styles.hint}>{'Back  ·  Leave search'}</Text>
+        </View>
       </View>
 
       <View style={[styles.results, { marginLeft: s(48) }]}>
-        <Text style={styles.heading} numberOfLines={1}>
-          {term ? `Results for “${term}”` : 'Start typing to find a title'}
-        </Text>
+        <View style={styles.headingRow}>
+          <Text style={styles.heading} numberOfLines={1}>
+            {term ? `Results for “${term}”` : 'Start typing to find a title'}
+          </Text>
+          {many && providers ? (
+            <Text style={styles.providers} numberOfLines={1}>
+              {providers}
+            </Text>
+          ) : null}
+        </View>
         <View style={styles.chips}>
           {KIND_FILTERS.map(entry => (
             <FocusButton
@@ -225,7 +238,7 @@ export function SearchScreen({ controller, activeKey, defaultScope, onOpen, onSw
               style={styles.chip}
             />
           ))}
-          {many ? <FocusButton label={scopeLabel} onPress={() => setMenu({ name: 'scope' })} style={styles.chip} /> : null}
+          {many ? <DropdownChip label={scopeLabel} onPress={() => setMenu({ name: 'scope' })} /> : null}
         </View>
 
         {status.line ? (
@@ -262,7 +275,7 @@ export function SearchScreen({ controller, activeKey, defaultScope, onOpen, onSw
                   key={group.key === restore ? `restore-${restoreNonce}` : 'card'}
                   title={cardTitle(group.display.item)}
                   subtitle={typeYearSubtitle(group.display.item)}
-                  caption={many ? sourceCaption(group, labels, sources) : undefined}
+                  badge={many ? <SourceBadge badge={cardBadge(group, labels, sources, activeKey)} /> : undefined}
                   imageUrl={group.display.item.landscapeUrl}
                   width={cardWidth}
                   preferred={group.key === restore}
@@ -281,10 +294,29 @@ export function SearchScreen({ controller, activeKey, defaultScope, onOpen, onSw
   );
 }
 
+/** The server scope chip: a chip with a down chevron, because it opens a list rather than filtering at once. */
+function DropdownChip({ label, onPress }: { label: string; onPress: () => void }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <Pressable
+      focusable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}, choose servers`}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onPress={onPress}
+      style={[styles.chip, styles.dropdown, focused && styles.dropdownFocused]}>
+      <Text style={styles.dropdownLabel}>{label}</Text>
+      <View style={styles.chevron} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, flexDirection: 'row', backgroundColor: colors.background, paddingTop: px(4) },
   title: { color: colors.text, fontSize: type.featured, fontWeight: '800' },
   label: { color: colors.textMuted, fontSize: type.body, marginTop: px(4), marginBottom: px(10) },
+  labelAccent: { color: colors.accent },
   input: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -313,11 +345,35 @@ const styles = StyleSheet.create({
   keys: { alignSelf: 'flex-start' },
   keyRow: { flexDirection: 'row', marginBottom: px(KEY_GAP) },
   editKey: { minHeight: px(KEY), paddingHorizontal: px(24), marginRight: px(KEY_GAP), minWidth: px(140) },
-  hint: { color: colors.textMuted, fontSize: type.caption, marginTop: px(14) },
+  hintRow: { flexDirection: 'row', alignItems: 'center', marginTop: px(14) },
+  hint: { color: colors.textMuted, fontSize: type.caption, marginLeft: px(12) },
   results: { flex: 1 },
-  heading: { color: colors.text, fontSize: type.title, fontWeight: '800', marginBottom: px(14) },
+  headingRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: px(14) },
+  heading: { flex: 1, color: colors.text, fontSize: type.title, fontWeight: '800' },
+  providers: { color: colors.accent, fontSize: type.body, marginLeft: px(24), flexShrink: 0 },
   chips: { flexDirection: 'row', marginBottom: px(20) },
   chip: { marginRight: px(14), minHeight: px(52), paddingHorizontal: px(24) },
+  dropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: px(12),
+    borderWidth: focus.borderWidth,
+    borderColor: colors.surfaceFocused,
+    backgroundColor: colors.surface,
+  },
+  dropdownFocused: { borderColor: colors.focusRing, transform: [{ scale: focus.scale }] },
+  dropdownLabel: { color: colors.text, fontSize: type.body, fontWeight: '600' },
+  chevron: {
+    width: px(12),
+    height: px(12),
+    marginLeft: px(16),
+    marginTop: -px(6),
+    borderRightWidth: 3,
+    borderBottomWidth: 3,
+    borderColor: colors.text,
+    transform: [{ rotate: '45deg' }],
+  },
   status: { color: colors.textMuted, fontSize: type.caption, marginBottom: px(12) },
   retries: { flexDirection: 'row', marginBottom: px(16) },
   spinner: { marginTop: px(48) },
