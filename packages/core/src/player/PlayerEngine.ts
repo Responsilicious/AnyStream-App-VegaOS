@@ -43,6 +43,11 @@ export interface EngineDeps {
   setGlobalElement?(element: MediaElementLike | null): void;
   /** How long direct play may take to start before it counts as failed (see DIRECT_PLAY_START_TIMEOUT_MS). */
   directPlayTimeoutMs?: number;
+  /**
+   * Quiet time after the last skip press before the element really seeks (see SEEK_DEBOUNCE_MS). Meanwhile the
+   * bar shows the target, so a held key scrubs without fetching every stretch it passes. 0 seeks at once.
+   */
+  seekDebounceMs?: number;
   /** Timers, injectable for tests. */
   setTimer?(fn: () => void, ms: number): unknown;
   clearTimer?(handle: unknown): void;
@@ -94,6 +99,9 @@ export class PlayerEngine {
   /** Counts loads, so a start-up timer from an earlier load cannot fail a later one. */
   private loadCount = 0;
   private watchdog: unknown = null;
+  /** Where a run of skip presses is heading, until the debounce commits it to the element. */
+  private pendingSeekMs: number | null = null;
+  private seekTimer: unknown = null;
 
   constructor(private readonly deps: EngineDeps) {}
 
@@ -283,7 +291,7 @@ export class PlayerEngine {
       return;
     }
     const duration = this.getDurationMs();
-    const clamped = duration > 0 ? Math.min(Math.max(0, ms), Math.max(0, duration - 1000)) : Math.max(0, ms);
+    const clamped = this.clampSeek(ms, duration);
     this.element.currentTime = clamped / 1000;
     // Show the target at once: the element only reports time again when playback resumes there, which on a
     // held skip key can be seconds later, and until then the bar would still point at the old position.
@@ -291,7 +299,43 @@ export class PlayerEngine {
   }
 
   seekBy(deltaMs: number): void {
-    this.seekTo(this.getPositionMs() + deltaMs);
+    const delay = this.deps.seekDebounceMs ?? 0;
+    if (delay <= 0) {
+      this.seekTo(this.getPositionMs() + deltaMs);
+      return;
+    }
+    const duration = this.getDurationMs();
+    const base = this.pendingSeekMs ?? this.getPositionMs();
+    const target = this.clampSeek(base + deltaMs, duration);
+    this.pendingSeekMs = target;
+    this.listeners.forEach(l => l.onTime?.(target, duration));
+    this.cancelPendingSeek(false);
+    const set = this.deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+    this.seekTimer = set(() => {
+      this.seekTimer = null;
+      if (this.released || this.pendingSeekMs === null) {
+        return;
+      }
+      const ms = this.pendingSeekMs;
+      this.pendingSeekMs = null;
+      this.seekTo(ms);
+    }, delay);
+  }
+
+  private clampSeek(ms: number, duration: number): number {
+    return duration > 0 ? Math.min(Math.max(0, ms), Math.max(0, duration - 1000)) : Math.max(0, ms);
+  }
+
+  /** Drops a queued skip; `forget` also forgets the target (a new load or release), else only the timer. */
+  private cancelPendingSeek(forget: boolean): void {
+    if (this.seekTimer !== null) {
+      const clear = this.deps.clearTimer ?? ((h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>));
+      clear(this.seekTimer);
+      this.seekTimer = null;
+    }
+    if (forget) {
+      this.pendingSeekMs = null;
+    }
   }
 
   /** Stops playback and frees the native player. Safe to call more than once. */
@@ -347,6 +391,7 @@ export class PlayerEngine {
 
   private async unloadCurrent(): Promise<void> {
     this.disarmWatchdog();
+    this.cancelPendingSeek(true);
     this.loadCount += 1;
     if (this.loader) {
       const loader = this.loader;
@@ -399,7 +444,10 @@ export class PlayerEngine {
         }
         break;
       case 'timeupdate':
-        this.listeners.forEach(l => l.onTime?.(this.getPositionMs(), this.getDurationMs()));
+        // While a skip is queued the bar shows its target, not where the old stretch has got to.
+        if (this.pendingSeekMs === null) {
+          this.listeners.forEach(l => l.onTime?.(this.getPositionMs(), this.getDurationMs()));
+        }
         break;
       case 'ended':
         this.setState('ended');

@@ -2,6 +2,7 @@ import * as W3C from '@amazon-devices/react-native-w3cmedia';
 import {
   DEFAULT_CAPABILITIES,
   DIRECT_PLAY_START_TIMEOUT_MS,
+  SEEK_DEBOUNCE_MS,
   installTimerGuard,
   installTypeSupportGuard,
   PlayerEngine,
@@ -38,6 +39,7 @@ export function createPlayerEngine(): PlayerEngine {
   return new PlayerEngine({
     prepare: installPolyfills,
     directPlayTimeoutMs: DIRECT_PLAY_START_TIMEOUT_MS,
+    seekDebounceMs: SEEK_DEBOUNCE_MS,
     createElement: () => new W3C.VideoPlayer() as unknown as MediaElementLike,
     createAdaptiveLoader: element => {
       if ((HlsJsPlayer as unknown as { isStub?: boolean }).isStub) {

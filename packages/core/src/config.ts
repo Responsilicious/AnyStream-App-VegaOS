@@ -32,6 +32,8 @@ export const QUICK_CONNECT_TIMEOUT_MS = 5 * 60 * 1000;
 
 /** Skip-forward / skip-back step on the remote. */
 export const SEEK_STEP_MS = 10000;
+/** Quiet time after the last skip press before the player really seeks, so a held key scrubs without loading every stretch it passes. */
+export const SEEK_DEBOUNCE_MS = 350;
 
 /** Start-up check of a saved sign-in. Short, because Home waits for it. */
 export const SESSION_CHECK_TIMEOUT_MS = 6000;

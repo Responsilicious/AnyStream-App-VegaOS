@@ -246,6 +246,44 @@ describe('PlayerEngine', () => {
     expect(element.currentTime).toBe(99);
   });
 
+  it('debounces a run of skips: the bar shows the target at once, the element seeks once afterwards', async () => {
+    const element = new FakeElement();
+    const timers: Array<() => void> = [];
+    const cleared: unknown[] = [];
+    const engine = new PlayerEngine({
+      createElement: () => element,
+      createAdaptiveLoader: () => new FakeLoader(),
+      seekDebounceMs: 350,
+      setTimer: fn => {
+        timers.push(fn);
+        return fn;
+      },
+      clearTimer: h => cleared.push(h),
+    });
+    const times: Array<[number, number]> = [];
+    engine.subscribe({ onTime: (p, d) => times.push([p, d]) });
+    await engine.init();
+    engine.attachSurface('s');
+    await engine.load(URL_DECISION, 0);
+    element.duration = 100;
+    element.currentTime = 50;
+
+    engine.seekBy(10000);
+    engine.seekBy(10000);
+    engine.seekBy(10000);
+    expect(times.map(t => t[0])).toEqual([60000, 70000, 80000]);
+    expect(element.currentTime).toBe(50);
+    expect(cleared).toHaveLength(2);
+    // The old stretch keeps ticking, but the bar stays on the target.
+    element.currentTime = 51;
+    element.emit('timeupdate');
+    expect(times).toHaveLength(3);
+
+    timers[timers.length - 1]();
+    expect(element.currentTime).toBe(80);
+    expect(times[times.length - 1][0]).toBe(80000);
+  });
+
   it('toggles play and pause', async () => {
     const { engine, element } = setup();
     await engine.init();

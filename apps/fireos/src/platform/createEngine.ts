@@ -1,6 +1,7 @@
 import {
   DEFAULT_CAPABILITIES,
   DIRECT_PLAY_START_TIMEOUT_MS,
+  SEEK_DEBOUNCE_MS,
   PlayerEngine,
   type DeviceCapabilities,
   type MediaElementLike,
@@ -10,6 +11,7 @@ import { FireVideoElement } from './videoElement';
 export function createPlayerEngine(): PlayerEngine {
   return new PlayerEngine({
     directPlayTimeoutMs: DIRECT_PLAY_START_TIMEOUT_MS,
+    seekDebounceMs: SEEK_DEBOUNCE_MS,
     createElement: () => new FireVideoElement(),
     // ExoPlayer plays HLS itself, so the "adaptive loader" just hands the playlist to the element.
     createAdaptiveLoader: element => ({
