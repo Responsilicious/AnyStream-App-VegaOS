@@ -41,6 +41,8 @@ interface Props {
   /** `choice` carries the version and tracks picked on this page, when they differ from the defaults. */
   onPlay: (episode: MediaItem, choice?: StartChoice) => void;
   onBack: () => void;
+  /** Copies of this title on other servers ("Also on Plex"); opens the chooser that asks before switching. */
+  alsoOn?: { label: string; onPress: () => void };
 }
 
 /**
@@ -48,7 +50,7 @@ interface Props {
  * actions beneath, a still of that episode on the right, and a season selector over an episode row. Selecting
  * an episode changes everything about the selection at once and never plays it.
  */
-export function SeriesPage({ provider, series, entryEpisodeId, nav, onPlay, onBack }: Props) {
+export function SeriesPage({ provider, series, entryEpisodeId, nav, onPlay, onBack, alsoOn }: Props) {
   const s = useScale();
   const [full, setFull] = useState<MediaItem>(series);
   const [episodes, setEpisodes] = useState<MediaItem[] | null>(null);
@@ -313,6 +315,7 @@ export function SeriesPage({ provider, series, entryEpisodeId, nav, onPlay, onBa
                   />
                 ) : null}
                 <FocusButton label={favorite ? 'Favourited' : 'Favourite'} onPress={() => void toggleFavorite()} style={styles.action} />
+                {alsoOn ? <FocusButton label={alsoOn.label} onPress={alsoOn.onPress} style={styles.action} /> : null}
               </View>
             ) : null}
             {selected && episodes !== null ? (

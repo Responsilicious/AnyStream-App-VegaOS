@@ -30,6 +30,8 @@ interface Props {
   /** A title in More like this was chosen. */
   onOpen: (item: MediaItem) => void;
   onBack: () => void;
+  /** Copies of this title on other servers ("Also on Plex"); opens the chooser that asks before switching. */
+  alsoOn?: { label: string; onPress: () => void };
 }
 
 /**
@@ -37,7 +39,7 @@ interface Props {
  * the left, a still on the right, More like this beneath. Playback stays off until the user's own progress
  * has loaded, so the button never says Play over a half-watched film.
  */
-export function MoviePage({ provider, item, nav, onPlay, onOpen, onBack }: Props) {
+export function MoviePage({ provider, item, nav, onPlay, onOpen, onBack, alsoOn }: Props) {
   const s = useScale();
   const [movie, setMovie] = useState<MediaItem | null>(null);
   const [similar, setSimilar] = useState<MediaItem[]>([]);
@@ -250,6 +252,7 @@ export function MoviePage({ provider, item, nav, onPlay, onOpen, onBack }: Props
                   onPress={() => void toggleWatched()}
                   style={styles.action}
                 />
+                {alsoOn ? <FocusButton label={alsoOn.label} onPress={alsoOn.onPress} style={styles.action} /> : null}
               </View>
             ) : null}
 

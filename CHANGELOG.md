@@ -6,6 +6,7 @@ What changed in AnyStream, newest first. Dates are when the work landed on a bra
 
 ### Added
 
+- **Search across servers** (30 Oct 2026). Search asks every connected Jellyfin, Emby and Plex server at once and shows one card per title, with the server it is on or “On 3 servers”. Results appear as each server answers; a server that fails keeps the others' results up and gets its own Retry. A copy on another server asks “Switch to <server>?” before anything changes, then opens the title there. Back from a title returns to the same search and card. Title pages offer “Also on <server>” when another server has the same title (matched by TMDB, IMDb or TVDB id). See `docs/cross-server-search.md`. Not yet tried on a stick.
 - **Emby servers** (30 Oct 2026). Add a server by address or find it on the local network, pick a user from the server's own list or type one, and sign in with username and password. Browsing, library filters and sorting, playback, progress and Sign in again all work through the provider layer, reusing the Jellyfin code with Emby's own headers (`X-Emby-Authorization`, `X-Emby-Token`). Addresses are tried as typed and then under `/emby`. Checked by Will on the Fire OS stick against Emby 4.10.2. See `docs/emby.md`.
 - "Could not reach this server" screen for Emby, with Try again, Edit address and Choose another provider.
 - If an address on the Jellyfin screen turns out to be an Emby server (or the other way round), the app says so and offers to connect it as the right kind instead.

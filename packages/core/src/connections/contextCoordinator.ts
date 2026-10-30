@@ -70,9 +70,12 @@ export class ContextCoordinator<T> {
   /**
    * Switches to `connectionId`. A switch already in flight is cancelled. On failure the current context is
    * left exactly as it was. Asking for the context that is already active does nothing.
+   *
+   * `destination` prepares what the switch is for, such as the title chosen in search, after the context is
+   * built and before anything commits: if the title has gone or the switch was superseded, nothing changes.
    */
-  async switchTo(connectionId: string): Promise<SwitchResult<T>> {
-    if (this.active?.connectionId === connectionId && !this.pending) {
+  async switchTo(connectionId: string, destination?: (data: T, signal: AbortSignal) => Promise<void>): Promise<SwitchResult<T>> {
+    if (this.active?.connectionId === connectionId && !this.pending && !destination) {
       return { outcome: 'switched', context: this.active };
     }
     this.cancel();
@@ -91,6 +94,12 @@ export class ContextCoordinator<T> {
       const data = await this.steps.prepare(connectionId, controller.signal);
       if (!stillMine()) {
         return { outcome: 'superseded' };
+      }
+      if (destination) {
+        await destination(data, controller.signal);
+        if (!stillMine()) {
+          return { outcome: 'superseded' };
+        }
       }
       this.generation += 1;
       this.active = { connectionId, generation: this.generation, data };

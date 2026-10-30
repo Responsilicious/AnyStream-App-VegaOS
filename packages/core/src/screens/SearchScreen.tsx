@@ -1,86 +1,183 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, BackHandler, FlatList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { FocusButton } from '../components/FocusButton';
 import { KeyButton } from '../components/KeyButton';
+import { SourceMenu, type SourceChoice } from '../components/SourceMenu';
 import { WideCard } from '../components/WideCard';
 import { px, useScale } from '../layout';
-import { describeError } from '../providers/jellyfin';
-import type { KindFilter, MediaItem, MediaProvider } from '../providers/types';
-import { editQuery, KEY_ROWS, KIND_FILTERS, SEARCH_DEBOUNCE_MS, typeKey, type EditKey } from '../search';
+import type { KindFilter, MediaItem } from '../providers/types';
+import { editQuery, KEY_ROWS, KIND_FILTERS, typeKey, type EditKey } from '../search';
+import { ALL_SOURCES, type SearchController, type SearchScope, type SearchSnapshot } from '../search/controller';
+import { findGroup, hitsOn } from '../search/match';
+import type { SearchGroup, SourceHit } from '../search/model';
+import { copyChoices, searchStatus, sourceCaption, sourceLabels } from '../search/sources';
 import { colors, focus, type } from '../theme';
 import { cardTitle, typeYearSubtitle } from '../util/format';
 
 interface Props {
-  provider: MediaProvider;
-  onOpen: (item: MediaItem) => void;
+  /** Lives above this screen, so query, results and the focused card survive a visit to a title page. */
+  controller: SearchController;
+  /** The connection the app is showing. */
+  activeKey: string | undefined;
+  /** Which servers a fresh search covers (search/sources.ts `defaultScope`). */
+  defaultScope: SearchScope;
+  /** Opens a copy on the active server. `alternatives` are the other servers' copies, for "Also on…". */
+  onOpen: (item: MediaItem, alternatives: SourceHit[]) => void;
+  /** Switches to the copy's server and opens it there; resolves to an error to show, or undefined. */
+  onSwitchOpen: (hit: SourceHit) => Promise<string | undefined>;
 }
+
+type Menu =
+  | { name: 'copies'; group: SearchGroup; mode: 'open' | 'switch'; choices: SourceChoice[] }
+  | { name: 'scope' };
 
 const COLUMNS = 3;
 const KEY = 68;
 const KEY_GAP = 10;
 /** Width of the keyboard column: six keys and the gaps between them, plus room for the focus outline. */
 const PANEL = 6 * KEY + 5 * KEY_GAP + 24;
+/** Retry buttons shown at once; more failed servers than this are still named in the status line. */
+const MAX_RETRY_BUTTONS = 3;
 
 /**
- * Search with an on-screen keyboard, because a remote has no keys (docs/design/search-mockup.png): the
- * keyboard and the query on the left, matching titles on the right, with chips for the kind of title.
- * A search runs once typing pauses, and an answer that arrives after a newer one started is dropped.
+ * Search with an on-screen keyboard, because a remote has no keys (docs/design/search-mockup.png), across every
+ * connected server (docs/cross-server-search.md): one card per title with the servers that have it. Results
+ * show as each server answers; a server that fails leaves the others' results up and gets its own Retry.
+ * Choosing a card never switches or plays: a copy on another server asks "Switch to <server>?" first.
  */
-export function SearchScreen({ provider, onOpen }: Props) {
+export function SearchScreen({ controller, activeKey, defaultScope, onOpen, onSwitchOpen }: Props) {
   const s = useScale();
   const { width } = useWindowDimensions();
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<KindFilter>('all');
-  const [results, setResults] = useState<MediaItem[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<SearchSnapshot>(() => controller.snapshot());
+  const [menu, setMenu] = useState<Menu | undefined>(undefined);
+  // The card to focus when results show again (Back from a title, a closed menu), and a nonce to re-apply it.
+  const [restore, setRestore] = useState(() => findGroup(controller.snapshot().groups, controller.remembered())?.key);
+  const [restoreNonce, setRestoreNonce] = useState(0);
+  const listRef = useRef<FlatList<SearchGroup>>(null);
+
+  useEffect(() => controller.subscribe(setSnapshot), [controller]);
 
   useEffect(() => {
-    const term = query.trim();
-    if (!term) {
-      setResults(null);
-      setLoading(false);
-      setError(null);
+    const { request } = controller.snapshot();
+    if (!request.query && request.scope !== defaultScope) {
+      controller.setRequest({ ...request, scope: defaultScope });
+    }
+    // Only when the screen opens: a scope the viewer picks stays until they change it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controller]);
+
+  // Late answers can merge cards: keep focus on the same title, not the same position.
+  useEffect(() => {
+    if (restore && !snapshot.groups.some(g => g.key === restore)) {
+      const moved = findGroup(snapshot.groups, controller.remembered());
+      setRestore(moved?.key);
+    }
+  }, [snapshot.groups, restore, controller]);
+
+  useEffect(() => {
+    if (menu?.name !== 'scope') {
       return undefined;
     }
-    let cancelled = false;
-    setLoading(true);
-    const timer = setTimeout(() => {
-      provider
-        .search(term, filter)
-        .then(found => {
-          if (!cancelled) {
-            setResults(found);
-            setError(null);
-            setLoading(false);
-          }
-        })
-        .catch(e => {
-          if (!cancelled) {
-            setError(describeError(e));
-            setLoading(false);
-          }
-        });
-    }, SEARCH_DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [provider, query, filter]);
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      setMenu(undefined);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [menu]);
+
+  const sources = controller.sources();
+  const labels = useMemo(() => sourceLabels(sources), [sources]);
+  const many = sources.length > 1;
+  const { query, filter, scope } = snapshot.request;
+  const term = query.trim();
+  const status = searchStatus(snapshot, labels);
+  const failed = snapshot.states.filter(st => st.status === 'unavailable' || st.status === 'timed-out' || st.status === 'denied');
+
+  const setQuery = (update: (q: string) => string) => controller.setRequest({ ...snapshot.request, query: update(query) });
+  const setFilter = (next: KindFilter) => controller.setRequest({ ...snapshot.request, filter: next });
+  const edit = (key: EditKey) => setQuery(q => editQuery(q, key));
+
+  const closeMenu = (group?: SearchGroup) => {
+    setMenu(undefined);
+    if (group) {
+      setRestore(group.key);
+      setRestoreNonce(n => n + 1);
+    }
+  };
+
+  const choose = (group: SearchGroup) => {
+    const here = hitsOn(group, activeKey);
+    const others = group.hits.filter(h => h.sourceKey !== activeKey);
+    if (here.length === 1) {
+      onOpen(here[0].item, others);
+    } else if (here.length > 1) {
+      setMenu({ name: 'copies', group, mode: 'open', choices: copyChoices(here, labels) });
+    } else {
+      setMenu({ name: 'copies', group, mode: 'switch', choices: copyChoices(group.hits, labels) });
+    }
+  };
+
+  if (menu?.name === 'copies') {
+    const { group } = menu;
+    return (
+      <SourceMenu
+        title={cardTitle(group.display.item)}
+        choices={menu.choices}
+        mode={menu.mode}
+        onOpen={hit => {
+          controller.remember({ key: group.key, hitKeys: group.hits.map(h => h.key) });
+          onOpen(hit.item, group.hits.filter(h => h.sourceKey !== activeKey));
+        }}
+        onSwitch={hit => {
+          controller.remember({ key: group.key, hitKeys: group.hits.map(h => h.key) });
+          return onSwitchOpen(hit);
+        }}
+        onClose={() => closeMenu(group)}
+      />
+    );
+  }
+
+  if (menu?.name === 'scope') {
+    const options: Array<{ scope: SearchScope; label: string }> = [
+      { scope: ALL_SOURCES, label: 'All servers' },
+      ...sources.map(src => ({ scope: src.key, label: labels.get(src.key) ?? src.label })),
+    ];
+    return (
+      <View style={styles.menu}>
+        <Text style={styles.title}>Search which servers?</Text>
+        <View style={styles.menuActions}>
+          {options.map(option => (
+            <FocusButton
+              key={option.scope}
+              label={option.label}
+              primary={option.scope === scope}
+              preferred={option.scope === scope}
+              onPress={() => {
+                controller.setRequest({ ...snapshot.request, scope: option.scope });
+                setMenu(undefined);
+              }}
+              style={styles.menuAction}
+            />
+          ))}
+        </View>
+      </View>
+    );
+  }
 
   const margin = s(96);
   const panelWidth = s(PANEL);
   const gap = s(24);
   const resultsWidth = width - 2 * margin - panelWidth - s(48);
   const cardWidth = Math.floor((resultsWidth - (COLUMNS - 1) * gap) / COLUMNS) - 2 * focus.borderWidth;
-
-  const edit = (key: EditKey) => setQuery(q => editQuery(q, key));
+  const restoreIndex = restore ? snapshot.groups.findIndex(g => g.key === restore) : -1;
+  const scopeLabel = scope === ALL_SOURCES ? 'All servers' : labels.get(scope) ?? 'One server';
+  const loading = snapshot.pending > 0 && snapshot.groups.length === 0;
 
   return (
     <View style={[styles.screen, { paddingHorizontal: margin }]}>
       <View style={{ width: panelWidth }}>
         <Text style={styles.title}>Search</Text>
-        <Text style={styles.label}>Search your library</Text>
+        <Text style={styles.label}>{many ? 'Search your servers' : 'Search your library'}</Text>
         <View style={styles.input}>
           <View style={styles.glyph}>
             <View style={styles.glyphLens} />
@@ -98,7 +195,7 @@ export function SearchScreen({ provider, onOpen }: Props) {
                 <KeyButton
                   key={key}
                   label={key}
-                  preferred={rowIndex === 0 && index === 0}
+                  preferred={restoreIndex < 0 && rowIndex === 0 && index === 0}
                   onPress={() => setQuery(q => typeKey(q, key))}
                 />
               ))}
@@ -116,7 +213,7 @@ export function SearchScreen({ provider, onOpen }: Props) {
 
       <View style={[styles.results, { marginLeft: s(48) }]}>
         <Text style={styles.heading} numberOfLines={1}>
-          {query.trim() ? `Results for “${query.trim()}”` : 'Start typing to find a title'}
+          {term ? `Results for “${term}”` : 'Start typing to find a title'}
         </Text>
         <View style={styles.chips}>
           {KIND_FILTERS.map(entry => (
@@ -128,36 +225,57 @@ export function SearchScreen({ provider, onOpen }: Props) {
               style={styles.chip}
             />
           ))}
+          {many ? <FocusButton label={scopeLabel} onPress={() => setMenu({ name: 'scope' })} style={styles.chip} /> : null}
         </View>
 
-        {error && <Text style={styles.error}>{error}</Text>}
-        {!error && loading && <ActivityIndicator color={colors.accent} size="large" style={styles.spinner} />}
-        {!error && !loading && results !== null && results.length === 0 && (
-          <Text style={styles.empty}>{`No results for “${query.trim()}”.`}</Text>
-        )}
-        {!error && results !== null && results.length > 0 && (
+        {status.line ? (
+          <Text style={styles.status} accessibilityLiveRegion="polite">
+            {status.line}
+          </Text>
+        ) : null}
+        {failed.length > 0 ? (
+          <View style={styles.retries}>
+            {failed.slice(0, MAX_RETRY_BUTTONS).map(st => (
+              <FocusButton
+                key={st.source.key}
+                label={`Retry ${labels.get(st.source.key) ?? st.source.label}`}
+                onPress={() => controller.retry(st.source.key)}
+                style={styles.chip}
+              />
+            ))}
+          </View>
+        ) : null}
+
+        {loading ? <ActivityIndicator color={colors.accent} size="large" style={styles.spinner} /> : null}
+        {status.empty ? <Text style={styles.empty}>{status.empty}</Text> : null}
+        {snapshot.groups.length > 0 ? (
           <FlatList
-            data={results}
+            ref={listRef}
+            data={snapshot.groups}
             key={`results-${COLUMNS}`}
             numColumns={COLUMNS}
-            keyExtractor={item => item.id}
+            keyExtractor={group => group.key}
             columnWrapperStyle={{ marginBottom: gap }}
-            renderItem={({ item, index }) => (
+            renderItem={({ item: group, index }) => (
               <View style={{ marginRight: (index + 1) % COLUMNS === 0 ? 0 : gap }}>
                 <WideCard
-                  title={cardTitle(item)}
-                  subtitle={typeYearSubtitle(item)}
-                  imageUrl={item.landscapeUrl}
+                  key={group.key === restore ? `restore-${restoreNonce}` : 'card'}
+                  title={cardTitle(group.display.item)}
+                  subtitle={typeYearSubtitle(group.display.item)}
+                  caption={many ? sourceCaption(group, labels, sources) : undefined}
+                  imageUrl={group.display.item.landscapeUrl}
                   width={cardWidth}
-                  onPress={() => onOpen(item)}
+                  preferred={group.key === restore}
+                  onFocus={() => controller.remember({ key: group.key, hitKeys: group.hits.map(h => h.key) })}
+                  onPress={() => choose(group)}
                 />
               </View>
             )}
             contentContainerStyle={{ paddingTop: px(8), paddingBottom: s(120) }}
-            initialNumToRender={COLUMNS * 3}
+            initialNumToRender={Math.max(COLUMNS * 3, restoreIndex + 1 + COLUMNS * 2)}
             windowSize={5}
           />
-        )}
+        ) : null}
       </View>
     </View>
   );
@@ -200,7 +318,11 @@ const styles = StyleSheet.create({
   heading: { color: colors.text, fontSize: type.title, fontWeight: '800', marginBottom: px(14) },
   chips: { flexDirection: 'row', marginBottom: px(20) },
   chip: { marginRight: px(14), minHeight: px(52), paddingHorizontal: px(24) },
+  status: { color: colors.textMuted, fontSize: type.caption, marginBottom: px(12) },
+  retries: { flexDirection: 'row', marginBottom: px(16) },
   spinner: { marginTop: px(48) },
   empty: { color: colors.textMuted, fontSize: type.body, marginTop: px(24) },
-  error: { color: colors.danger, fontSize: type.body, marginTop: px(24) },
+  menu: { flex: 1, backgroundColor: colors.background, justifyContent: 'center', paddingHorizontal: px(192) },
+  menuActions: { marginTop: px(32) },
+  menuAction: { marginBottom: px(16), alignSelf: 'flex-start', minWidth: px(520) },
 });
