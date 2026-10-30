@@ -265,4 +265,8 @@ export interface MediaProvider extends PlaybackProvider {
   queryLibrary(library: Library, view: LibraryView, start: number, limit: number, signal?: AbortSignal): Promise<LibraryPage<MediaItem>>;
   /** How many titles a filter matches, or null when the server cannot say exactly. */
   countLibrary(library: Library, view: LibraryView, signal?: AbortSignal): Promise<number | null>;
+  /** Whether this user may ask the server to scan for new and changed files: a Jellyfin or Emby administrator, or the Plex server's owner. */
+  canScanLibraries(signal?: AbortSignal): Promise<boolean>;
+  /** Asks the server to scan one library, or every library when no id is given. Resolves once the scan is queued; it runs on the server. */
+  scanLibraries(libraryId?: string): Promise<void>;
 }

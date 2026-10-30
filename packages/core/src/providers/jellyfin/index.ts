@@ -44,6 +44,7 @@ import {
   stopTranscode,
 } from './playback';
 import { countJellyfinLibrary, fetchLibraryFacets, jellyfinLibraryCapabilities, queryJellyfinLibrary } from './library';
+import { canScanJellyfin, scanJellyfin } from './scan';
 import { fetchVersions } from './versions';
 
 /**
@@ -115,6 +116,14 @@ export class JellyfinProvider implements MediaProvider {
 
   countLibrary(library: Library, view: LibraryView, signal?: AbortSignal): Promise<number | null> {
     return countJellyfinLibrary(this.http, this.session.userId, library, view, signal);
+  }
+
+  canScanLibraries(signal?: AbortSignal): Promise<boolean> {
+    return canScanJellyfin(this.http, this.session.userId, signal);
+  }
+
+  scanLibraries(libraryId?: string): Promise<void> {
+    return scanJellyfin(this.http, libraryId);
   }
 
   setPlayed(id: string, played: boolean): Promise<void> {

@@ -149,6 +149,14 @@ export const App = () => {
     },
     [connections, device],
   );
+  // Settings → Servers builds its own providers to check scan rights and start scans on any saved server.
+  const managerProvider = useCallback(
+    (id: string): MediaProvider | undefined => {
+      const next = connections.toSession(id);
+      return next ? createProvider(next, device, capsRef.current ?? DEFAULT_CAPABILITIES) : undefined;
+    },
+    [connections, device],
+  );
   const searchController = useMemo(
     () =>
       new SearchController({
@@ -518,6 +526,7 @@ export const App = () => {
     <ServerManagerScreen
       store={connections}
       device={device}
+      providerFor={managerProvider}
       onSwitch={id => {
         if (session) {
           switchTo(id);
