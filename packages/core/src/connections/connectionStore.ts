@@ -1,4 +1,4 @@
-import type { ServerRecord, Session } from '../providers/types';
+import { isJellyfinFamily, type ServerRecord, type Session } from '../providers/types';
 import type { KeyValueStore } from '../storage/keyValueStore';
 import {
   accountId,
@@ -28,7 +28,10 @@ const EMPTY: ConnectionsState = {
   preferences: { startup: 'last-used', removedPlexServers: [] },
 };
 
+/** A Jellyfin or Emby sign-in: both have one account per server and the same id rules. */
 export interface JellyfinSignIn {
+  /** Left out for Jellyfin. */
+  provider?: 'jellyfin' | 'emby';
   /** The server's stable id from /System/Info/Public. */
   serverNativeId: string;
   serverName: string;
@@ -169,14 +172,15 @@ export class ConnectionStore {
    * instead of adding a second one. Does not change the active connection unless `activate` is set.
    */
   addJellyfin(signIn: JellyfinSignIn, options: { activate?: boolean } = {}): ConnectionView {
-    const sid = serverId('jellyfin', signIn.serverNativeId);
-    const aid = accountId('jellyfin', signIn.serverNativeId, signIn.userId);
+    const provider = signIn.provider ?? 'jellyfin';
+    const sid = serverId(provider, signIn.serverNativeId);
+    const aid = accountId(provider, signIn.serverNativeId, signIn.userId);
     const ref = `${aid}`;
     this.setSecret(ref, signIn.accessToken);
-    this.upsertServer({ id: sid, provider: 'jellyfin', nativeId: signIn.serverNativeId, name: signIn.serverName, endpoints: [signIn.baseUrl] });
+    this.upsertServer({ id: sid, provider, nativeId: signIn.serverNativeId, name: signIn.serverName, endpoints: [signIn.baseUrl] });
     this.upsertAccount({
       id: aid,
-      provider: 'jellyfin',
+      provider,
       nativeUserId: signIn.userId,
       displayName: signIn.userName,
       credentialRef: ref,
@@ -367,8 +371,8 @@ export class ConnectionStore {
     }
     a.authStatus = 'expired';
     this.store.delete(SECRET_PREFIX + a.credentialRef);
-    if (a.provider === 'jellyfin') {
-      // A Jellyfin connection's token is the account's token.
+    if (isJellyfinFamily(a.provider)) {
+      // A Jellyfin or Emby connection's token is the account's token.
       for (const c of this.state.connections.filter(x => x.accountId === account)) {
         this.store.delete(SECRET_PREFIX + c.credentialRef);
       }
@@ -487,7 +491,7 @@ export class ConnectionStore {
     this.state.servers = this.state.servers.filter(s => usedServers.has(s.id));
     // A Plex account with no servers left stays signed in: the user may add servers from it later.
     const usedAccounts = new Set(this.state.connections.map(c => c.accountId));
-    const gone = this.state.accounts.filter(a => a.provider === 'jellyfin' && !usedAccounts.has(a.id));
+    const gone = this.state.accounts.filter(a => isJellyfinFamily(a.provider) && !usedAccounts.has(a.id));
     for (const a of gone) {
       this.store.delete(SECRET_PREFIX + a.credentialRef);
     }

@@ -8,7 +8,7 @@ import type { ServerKind } from './providers/types';
  */
 
 export function providerName(kind: ServerKind): string {
-  return kind === 'plex' ? 'Plex' : 'Jellyfin';
+  return kind === 'plex' ? 'Plex' : kind === 'emby' ? 'Emby' : 'Jellyfin';
 }
 
 const STATUS_TEXT: Record<ConnectionStatus, string> = {
@@ -56,7 +56,7 @@ export function routeText(route: Route): string {
   return `${route.where === 'local' ? 'Local' : 'Remote'} · ${route.secure ? 'Secure' : 'Not encrypted'}`;
 }
 
-/** "Plex · Will" or "Jellyfin · Will"; shared Plex servers add whose they are. */
+/** "Plex · Will", "Jellyfin · Will" or "Emby · Will"; shared Plex servers add whose they are. */
 export function connectionSubtitle(view: ConnectionView): string {
   const parts = [providerName(view.server.provider), view.connection.profileName || view.account.displayName];
   if (view.server.ownerName) {

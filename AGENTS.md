@@ -1,6 +1,6 @@
 # AnyStream agent guide
 
-AnyStream is a Netflix-style TV client for Jellyfin (Plex later), written in React Native + TypeScript for Amazon Vega OS (Fire TV, formerly "Kepler"). The reference device is the Fire TV Stick 4K Select. Read [README.md](README.md) first; this file adds what an agent needs to work safely in the code.
+AnyStream is a Netflix-style TV client for Jellyfin, Emby and Plex, written in React Native + TypeScript for Amazon Vega OS (Fire TV, formerly "Kepler"). The reference device is the Fire TV Stick 4K Select. Read [README.md](README.md) first; this file adds what an agent needs to work safely in the code.
 
 ## Status
 
@@ -103,7 +103,8 @@ App.tsx  ── probes device codecs, loads session, picks a screen
                └─ PlayerEngine        one media element: surface wait, url vs hls load, state events
                      └─ createEngine.ts  real Vega deps (W3C VideoPlayer, HlsJsPlayer, polyfills)
 providers/types.ts  provider-agnostic model (MediaProvider, PlaybackDecision, DeviceCapabilities)
-providers/jellyfin/ http client, probe, auth, items, playback decision, DeviceProfile, errors
+providers/jellyfin/ http client, probe, auth, items, playback decision, DeviceProfile, errors (also serves Emby)
+providers/emby/     Emby-only calls (public users); browsing and playback reuse providers/jellyfin (docs/emby.md)
 storage/            SessionStore over KeyValueStore (MMKV on device, MemoryStore fallback)
 library/            filter/sort state, saved views per server/viewer/library/page, query transaction (BrowseController)
 util/               url candidates/query building, Jellyfin ticks, device id
@@ -112,7 +113,7 @@ config.ts, theme.ts constants and the 10-foot UI palette/sizes
 
 Key rules the design depends on:
 
-- **Screens and the player only see `providers/types.ts`.** Nothing outside `providers/jellyfin/` may import Jellyfin types. Plex must be addable as a new folder under `providers/` with no changes elsewhere.
+- **Screens and the player only see `providers/types.ts`.** Nothing outside `providers/jellyfin/` may import Jellyfin types. Plex must be addable as a new folder under `providers/` with no changes elsewhere. Emby shares Jellyfin's API, so `JellyfinProvider` serves both; the only difference is the header dialect (`httpForServer` picks it from the server's kind). Use `isJellyfinFamily(kind)` rather than `kind === 'jellyfin'` where Emby should behave the same.
 - **Playback modes:** `'url'` = direct play via `element.src` (MP4/M4V only); `'hls'` = server transcode via Amazon hls.js. A direct-play error is `recoverable`; the controller retries once with `forceTranscode`.
 - **Capabilities:** `DEFAULT_CAPABILITIES` is a conservative baseline. Probing may only remove codecs, never add them, and never empties a list.
 - **Progress reporting and transcode stop are best effort** (`safely`); they must never interrupt playback. `stop()` always releases the engine and, for transcodes, calls `DELETE /Videos/ActiveEncodings`.

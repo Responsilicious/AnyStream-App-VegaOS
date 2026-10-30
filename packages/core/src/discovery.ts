@@ -1,9 +1,10 @@
 import { DISCOVERY_CONCURRENCY, DISCOVERY_PORT, DISCOVERY_TIMEOUT_MS } from './config';
 
 /**
- * "Find servers on this network" (docs/sign-in.md). Jellyfin's own discovery is a UDP broadcast, and Vega has
- * no UDP socket for apps, so this asks every address on the TV's local /24 network for Jellyfin's public info
- * on the default port instead. It only finds servers on the home network; anything remote needs its address.
+ * "Find servers on this network" (docs/sign-in.md). Jellyfin's and Emby's own discovery is a UDP broadcast, and
+ * Vega has no UDP socket for apps, so this asks every address on the TV's local /24 network for the servers'
+ * public info on their shared default port (8096) instead. It only finds servers on the home network; anything
+ * remote needs its address.
  */
 
 export interface FoundServer {
@@ -11,6 +12,8 @@ export interface FoundServer {
   name: string;
   /** Base URL to connect to, e.g. http://192.168.1.20:8096 */
   address: string;
+  /** Which kind of server answered, when the probe can tell. */
+  product?: 'jellyfin' | 'emby';
 }
 
 /** The TV's IPv4 address and netmask, as the platform reports them. */

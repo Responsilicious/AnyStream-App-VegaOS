@@ -1,7 +1,8 @@
 import { SESSION_CHECK_TIMEOUT_MS } from '../config';
-import { checkSession, JellyfinHttp } from '../providers/jellyfin';
+import { checkSession, httpForServer } from '../providers/jellyfin';
 import type { DeviceInfo, FetchLike } from '../providers/jellyfin/http';
 import { isPlexError, PlexHttp } from '../providers/plex';
+import { isJellyfinFamily } from '../providers/types';
 import type { ConnectionStore } from './connectionStore';
 import type { ConnectionStatus } from './model';
 
@@ -48,13 +49,14 @@ export async function checkConnection(
   }
   const endpoints = view.server.endpoints;
 
-  if (view.server.provider === 'jellyfin') {
+  if (isJellyfinFamily(view.server.provider)) {
     const session = store.toSession(id);
     if (!session) {
       return { status: 'auth-required' };
     }
     for (const endpoint of endpoints) {
-      const result = await checkSession(new JellyfinHttp(endpoint, device, undefined, fetchImpl), { ...session, server: { ...session.server, baseUrl: endpoint } }, signal, SESSION_CHECK_TIMEOUT_MS);
+      const server = { ...session.server, baseUrl: endpoint };
+      const result = await checkSession(httpForServer(server, device, undefined, fetchImpl), { ...session, server }, signal, SESSION_CHECK_TIMEOUT_MS);
       if (result === 'ok') {
         return answered(store, view.server.id, endpoints, endpoint);
       }

@@ -5,7 +5,14 @@ import { isJellyfinError } from './providers/jellyfin/errors';
  * state's text can be tested, and so a failure always says what to do next.
  */
 
-export type ConnectProblem = 'unavailable' | 'certificate' | 'not-jellyfin' | 'timeout' | 'invalid';
+export type ConnectProblem = 'unavailable' | 'certificate' | 'not-jellyfin' | 'wrong-product' | 'timeout' | 'invalid';
+
+/** Which server family a connect or sign-in screen is for. */
+export type ServerFamily = 'jellyfin' | 'emby';
+
+export function familyName(family: ServerFamily): string {
+  return family === 'emby' ? 'Emby' : 'Jellyfin';
+}
 
 export interface ConnectStatus {
   tone: 'busy' | 'info' | 'success' | 'error';
@@ -30,6 +37,8 @@ export function connectProblem(e: unknown): ConnectProblem {
     case 'not-jellyfin':
     case 'not-found':
       return 'not-jellyfin';
+    case 'wrong-product':
+      return 'wrong-product';
     case 'timeout':
       return 'timeout';
     default:
@@ -37,8 +46,34 @@ export function connectProblem(e: unknown): ConnectProblem {
   }
 }
 
-export function connectStatus(problem: ConnectProblem, message?: string): ConnectStatus {
+/**
+ * What the status line says for a problem. Emby's wording follows its connection spec (Emby connection
+ * handoff §15); Jellyfin keeps the wording from docs/sign-in.md. `detected` names the product that did answer
+ * for 'wrong-product'.
+ */
+export function connectStatus(problem: ConnectProblem, message?: string, family: ServerFamily = 'jellyfin', detected?: ServerFamily): ConnectStatus {
+  if (family === 'emby') {
+    switch (problem) {
+      case 'certificate':
+        return {
+          tone: 'error',
+          title: 'Could not verify the secure connection',
+          detail: 'The server needs a certificate from a trusted authority. On your home network you can try its http:// address.',
+        };
+      case 'not-jellyfin':
+        return { tone: 'error', title: 'This address could not be used as an Emby server', detail: 'Check the address, including any port or path.' };
+      case 'invalid':
+        return { tone: 'error', title: 'Check the server address', detail: message };
+      case 'timeout':
+      case 'unavailable':
+        return { tone: 'error', title: 'Could not reach this server', detail: 'Check the address and make sure your Emby server is available.' };
+    }
+  }
   switch (problem) {
+    case 'wrong-product': {
+      const other = familyName(detected ?? (family === 'emby' ? 'jellyfin' : 'emby'));
+      return { tone: 'error', title: `That address is a ${other} server`, detail: `Connect it as ${other} instead, or check the address.` };
+    }
     case 'certificate':
       return {
         tone: 'error',
@@ -85,13 +120,15 @@ export function addressProblem(input: string): string | null {
  * Sign-in failures. A refusal never says whether the account exists; a connection problem says so plainly,
  * so the person does not retype a correct password.
  */
-export function signInError(e: unknown, serverName: string): string {
+export function signInError(e: unknown, serverName: string, family: ServerFamily = 'jellyfin'): string {
   if (!isJellyfinError(e)) {
     return 'Sign-in did not work. Try again.';
   }
   switch (e.kind) {
     case 'unauthorized':
-      return 'Sign-in failed. Check the username and password, then try again.';
+      return family === 'emby'
+        ? 'Sign-in failed. Check your server username and password.'
+        : 'Sign-in failed. Check the username and password, then try again.';
     case 'network':
     case 'timeout':
     case 'certificate':

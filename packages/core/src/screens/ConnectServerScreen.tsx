@@ -10,17 +10,20 @@ import {
   connectProblem,
   connectStatus,
   displayAddress,
+  familyName,
   serverFound,
+  type ConnectProblem,
   type ConnectStatus,
+  type ServerFamily,
 } from '../connect';
 import { discoverServers, subnetHosts, type FoundServer } from '../discovery';
 import { platform } from '../platform';
 import { startEdit, type TextEdit } from '../keyboard';
 import { px } from '../layout';
 import {
+  httpForServer,
   identifyServer,
   isJellyfinError,
-  JellyfinHttp,
   probeServer,
   QuickConnectFlow,
   type DeviceInfo,
@@ -28,23 +31,30 @@ import {
 import type { ServerRecord } from '../providers/types';
 import { colors, type } from '../theme';
 import { useBack } from '../useBack';
+import { ConnectionRecovery } from './ConnectionRecovery';
 
 interface Props {
   device: DeviceInfo;
   initialAddress: string;
-  /** The server answered and is Jellyfin; `quickConnect` says whether it offers Quick Connect. */
+  /** Which kind of server this screen connects. Jellyfin when left out. */
+  family?: ServerFamily;
+  /** The server answered and is the right kind; `quickConnect` says whether it offers Quick Connect (Jellyfin only). */
   onConnected: (server: ServerRecord, quickConnect: boolean) => void;
+  /** The address is the other kind of server: offered as "Connect as …", never done silently. */
+  onUseOtherProvider?: (family: ServerFamily, address: string) => void;
+  /** Back to the provider chooser. */
+  onChangeProvider?: () => void;
   onBack: () => void;
 }
 
-type Phase = 'idle' | 'checking' | 'found' | 'searching';
+type Phase = 'idle' | 'checking' | 'found' | 'searching' | 'failed';
 
 /**
  * Server connection (docs/sign-in.md): a labelled address field with the on-screen keyboard, Connect, and a
  * separate network search. Every state says what is happening, the address survives errors, and the verified
  * server name is shown before any credentials are asked for.
  */
-export function ConnectServerScreen({ device, initialAddress, onConnected, onBack }: Props) {
+export function ConnectServerScreen({ device, initialAddress, family = 'jellyfin', onConnected, onUseOtherProvider, onChangeProvider, onBack }: Props) {
   const [address, setAddress] = useState<TextEdit>(() => startEdit(initialAddress));
   const [editing, setEditing] = useState(false);
   // Bumped when the keyboard closes, so the field remounts with preferred focus (focus goes back to it).
@@ -53,6 +63,8 @@ export function ConnectServerScreen({ device, initialAddress, onConnected, onBac
   const [status, setStatus] = useState<ConnectStatus | null>(null);
   const [found, setFound] = useState<{ server: ServerRecord; quick: boolean } | null>(null);
   const [nearby, setNearby] = useState<FoundServer[]>([]);
+  // The last failure, and for 'wrong-product' which product answered, for the recovery actions.
+  const [problem, setProblem] = useState<{ kind: ConnectProblem; detected?: ServerFamily } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -69,21 +81,27 @@ export function ConnectServerScreen({ device, initialAddress, onConnected, onBac
 
   const connect = useCallback(
     async (text: string) => {
-      const problem = addressProblem(text);
-      if (problem) {
-        setStatus(connectStatus('invalid', problem));
+      const invalid = addressProblem(text);
+      if (invalid) {
+        setProblem({ kind: 'invalid' });
+        setStatus(connectStatus('invalid', invalid, family));
         return;
       }
       cancel();
       const controller = new AbortController();
       abortRef.current = controller;
       setFound(null);
+      setProblem(null);
       setPhase('checking');
       setStatus(CHECKING);
       try {
-        const { baseUrl, info } = await probeServer(text, device, { signal: controller.signal });
-        const server: ServerRecord = { id: info.Id, kind: 'jellyfin', name: info.ServerName, baseUrl };
-        const quick = await new QuickConnectFlow(new JellyfinHttp(baseUrl, device), server).isAvailable(controller.signal);
+        const { baseUrl, info } = await probeServer(text, device, { signal: controller.signal, product: family });
+        const server: ServerRecord = { id: info.Id, kind: family, name: info.ServerName, baseUrl };
+        // Quick Connect is Jellyfin's; Emby has nothing like it, so it is never offered there.
+        const quick = family === 'jellyfin' && (await new QuickConnectFlow(httpForServer(server, device), server).isAvailable(controller.signal));
+        if (controller.signal.aborted) {
+          return;
+        }
         setFound({ server, quick });
         setPhase('found');
         setStatus(serverFound(server.name));
@@ -93,11 +111,15 @@ export function ConnectServerScreen({ device, initialAddress, onConnected, onBac
           setStatus(null);
           return;
         }
-        setPhase('idle');
-        setStatus(connectStatus(connectProblem(e)));
+        const kind = connectProblem(e);
+        const detected = isJellyfinError(e) ? e.detected : undefined;
+        setProblem({ kind, detected });
+        // Emby's spec gives an unreachable server its own recovery screen; everything else stays on the form.
+        setPhase(family === 'emby' && (kind === 'unavailable' || kind === 'timeout') ? 'failed' : 'idle');
+        setStatus(connectStatus(kind, undefined, family, detected));
       }
     },
-    [cancel, device],
+    [cancel, device, family],
   );
 
   const search = useCallback(async () => {
@@ -121,8 +143,13 @@ export function ConnectServerScreen({ device, initialAddress, onConnected, onBac
     const servers = await discoverServers(
       hosts,
       (url, signal, timeoutMs) => identifyServer(url, device, { signal, timeoutMs }),
-      { signal: controller.signal, onFound: server => setNearby(list => [...list, server]) },
+      {
+        signal: controller.signal,
+        // Only this screen's kind of server is listed; the other kind is added through its own card.
+        onFound: server => (server.product === family ? setNearby(list => [...list, server]) : undefined),
+      },
     );
+    const matching = servers.filter(s => s.product === family);
     if (controller.signal.aborted) {
       setPhase('idle');
       setStatus(null);
@@ -130,11 +157,11 @@ export function ConnectServerScreen({ device, initialAddress, onConnected, onBac
     }
     setPhase('idle');
     setStatus(
-      servers.length > 0
-        ? { tone: 'success', title: servers.length === 1 ? 'Found 1 server' : `Found ${servers.length} servers`, detail: 'Choose one to connect.' }
+      matching.length > 0
+        ? { tone: 'success', title: matching.length === 1 ? 'Found 1 server' : `Found ${matching.length} servers`, detail: 'Choose one to connect. Servers are checked before sign-in.' }
         : { tone: 'error', title: 'No servers found on this network', detail: 'A server elsewhere needs its address.' },
     );
-  }, [cancel, device]);
+  }, [cancel, device, family]);
 
   const stop = useCallback(() => {
     cancel();
@@ -146,7 +173,8 @@ export function ConnectServerScreen({ device, initialAddress, onConnected, onBac
     setAddress(next);
     // A new address undoes "Server found": it has not been checked.
     setFound(null);
-    setPhase(p => (p === 'found' ? 'idle' : p));
+    setProblem(null);
+    setPhase(p => (p === 'found' || p === 'failed' ? 'idle' : p));
     setStatus(s => (s?.tone === 'success' ? null : s));
   }, []);
 
@@ -157,6 +185,10 @@ export function ConnectServerScreen({ device, initialAddress, onConnected, onBac
     }
     if (phase === 'checking' || phase === 'searching') {
       stop();
+      return true;
+    }
+    if (phase === 'failed') {
+      setPhase('idle');
       return true;
     }
     onBack();
@@ -195,9 +227,28 @@ export function ConnectServerScreen({ device, initialAddress, onConnected, onBac
     </View>
   );
 
+  if (phase === 'failed') {
+    return (
+      <ConnectionRecovery
+        address={address.text}
+        family={family}
+        onRetry={() => connect(address.text)}
+        onEdit={() => {
+          setPhase('idle');
+          setStatus(null);
+          setEditing(true);
+        }}
+        onChangeProvider={onChangeProvider}
+        onBack={() => setPhase('idle')}
+      />
+    );
+  }
+
+  const otherProduct = problem?.kind === 'wrong-product' && problem.detected && onUseOtherProvider ? problem.detected : undefined;
+
   return (
     <AuthFrame onBack={onBack} right={right}>
-      <HeroTitle>{'Connect to\nJellyfin server'}</HeroTitle>
+      <HeroTitle>{family === 'emby' ? 'Connect to Emby' : 'Connect to\nJellyfin server'}</HeroTitle>
       <TextField
         key={`address-${fieldEpoch}`}
         label="Server address"
@@ -237,9 +288,20 @@ export function ConnectServerScreen({ device, initialAddress, onConnected, onBac
             disabled={phase === 'checking'}
             onPress={phase === 'searching' ? stop : search}
           />
+          {otherProduct ? (
+            <AuthButton
+              label={`Connect as ${familyName(otherProduct)} instead`}
+              icon="server"
+              onPress={() => onUseOtherProvider?.(otherProduct, address.text)}
+              style={authStyles.stackGap}
+            />
+          ) : null}
         </>
       )}
-      <Text style={styles.remote}>For remote access, use your server's HTTPS address.</Text>
+      {onChangeProvider && phase !== 'checking' ? <AuthButton label="Change provider" link onPress={onChangeProvider} /> : null}
+      <Text style={styles.remote}>
+        {family === 'emby' ? 'Use your Emby server address to connect directly. ' : ''}For remote access, use your server's HTTPS address.
+      </Text>
       <StatusLine status={status ?? NOT_CHECKED} />
     </AuthFrame>
   );

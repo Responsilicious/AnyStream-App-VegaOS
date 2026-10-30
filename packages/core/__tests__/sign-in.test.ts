@@ -355,6 +355,7 @@ describe('network search', () => {
       id: 'srv',
       name: 'Home',
       address: 'http://10.0.0.2:8096',
+      product: 'jellyfin',
     });
     expect(calls).toHaveLength(1);
     const other = fakeFetch(() => ({ body: { hello: 1 } }));

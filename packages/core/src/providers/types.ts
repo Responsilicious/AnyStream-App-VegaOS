@@ -17,10 +17,15 @@ export type {
   YearRange,
 } from './libraryQuery';
 
-export type ServerKind = 'jellyfin' | 'plex';
+export type ServerKind = 'jellyfin' | 'emby' | 'plex';
+
+/** Servers that share Jellyfin's API and sign-in: Jellyfin itself and Emby, which it forked from. */
+export function isJellyfinFamily(kind: ServerKind): kind is 'jellyfin' | 'emby' {
+  return kind !== 'plex';
+}
 
 export interface ServerRecord {
-  /** The server's own id (Jellyfin `Id`, Plex `machineIdentifier`). */
+  /** The server's own id (Jellyfin and Emby `Id`, Plex `machineIdentifier`). */
   id: string;
   kind: ServerKind;
   name: string;
