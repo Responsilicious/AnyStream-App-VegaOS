@@ -36,13 +36,6 @@ export const VIDEO_PROBES: Record<string, string> = {
   hevc: 'video/mp4; codecs="hvc1.1.6.L120.B0"',
 };
 
-export const AUDIO_PROBES: Record<string, string> = {
-  aac: 'audio/mp4; codecs="mp4a.40.2"',
-  ac3: 'audio/mp4; codecs="ac-3"',
-  eac3: 'audio/mp4; codecs="ec-3"',
-  mp3: 'audio/mpeg',
-};
-
 export interface DecodingProbeConfig {
   type: 'media-source';
   video?: { contentType: string; width: number; height: number; bitrate: number; framerate: number };
@@ -61,7 +54,7 @@ async function supports(probe: DecodingInfoFn, config: DecodingProbeConfig): Pro
 }
 
 /**
- * Narrows the defaults to what this device reports it can decode.
+ * Narrows the default video codecs to what this device reports it can decode.
  * If the probe is unavailable, or would leave nothing for a media type, the defaults stand,
  * so a flaky probe can never produce a profile that rejects everything.
  */
@@ -86,22 +79,10 @@ export async function probeCapabilities(
       return { codec, ok };
     }),
   );
-  const audioResults = await Promise.all(
-    base.audioCodecs.map(async codec => {
-      const contentType = AUDIO_PROBES[codec];
-      if (!contentType) {
-        return { codec, ok: true };
-      }
-      const ok = await supports(decodingInfo, {
-        type: 'media-source',
-        audio: { contentType },
-      });
-      return { codec, ok };
-    }),
-  );
-
+  // The audio half of decodingInfo is not trusted: on the stick it said no to AAC, AC-3 and E-AC-3 and yes only
+  // to MP3 (30 Oct 2026), while the same device plays AAC and AC-3 fine, and the narrowed profile made the server
+  // transcode every MKV ("AudioCodecNotSupported"). The baseline audio list stands.
   const video = videoResults.filter(r => r.ok).map(r => r.codec);
-  const audio = audioResults.filter(r => r.ok).map(r => r.codec);
 
   const videoCodecs = video.length > 0 ? video : base.videoCodecs;
   // The server may copy any HLS video codec straight through, so one the device cannot decode leaves that list
@@ -110,7 +91,6 @@ export async function probeCapabilities(
   return {
     ...base,
     videoCodecs,
-    audioCodecs: audio.length > 0 ? audio : base.audioCodecs,
     hlsVideoCodecs: hlsVideo.length > 0 ? hlsVideo : base.hlsVideoCodecs,
   };
 }
