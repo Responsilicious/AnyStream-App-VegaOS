@@ -132,6 +132,11 @@ export function buildTracks(source: MediaSource): TrackInfo | undefined {
   return audio.length > 0 || subtitles.length > 0 ? { audio, subtitles } : undefined;
 }
 
+/** Whether a transcoding URL the server built burns in a subtitle track. */
+function hasSubtitleParam(url: string | undefined): boolean {
+  return url !== undefined && /[?&]SubtitleStreamIndex=\d/.test(url);
+}
+
 function hasContainer(source: MediaSource, allowed: string[]): boolean {
   const containers = (source.Container ?? '').toLowerCase().split(',');
   return containers.some(c => allowed.includes(c.trim()));
@@ -159,12 +164,14 @@ export async function getPlaybackDecision(
   const directAllowed = !force && !subtitleOn && !audioChosen && urlModeReaches(caps, http.baseUrl);
 
   // Jellyfin only applies audio and subtitle choices when the request also names the media source they belong
-  // to; without it a chosen subtitle came back not burned in (seen on the stick, 29 Oct 2026). The choice goes in
-  // the query as well as the body, which the server reads first.
-  const info = await http.post<PlaybackInfoResponse>(`/Items/${itemId}/PlaybackInfo`, {
+  // to (StreamBuilder options are set only when MediaSourceId matches); without it a chosen subtitle came back
+  // not burned in (29 Oct 2026) and, worse, "no subtitles" (-1) was dropped and the server burned in the file's
+  // default track for every transcode (Aladdin, 30 Oct 2026). The choice goes in the query as well as the body,
+  // which the server reads first.
+  const playbackInfo = (mediaSourceId: string | undefined) => http.post<PlaybackInfoResponse>(`/Items/${itemId}/PlaybackInfo`, {
     query: {
       UserId: userId,
-      MediaSourceId: options.mediaSourceId,
+      MediaSourceId: mediaSourceId,
       AudioStreamIndex: audioChosen ? options.audioIndex : undefined,
       // -1 when none is chosen: otherwise the server may burn in a default image subtitle nobody asked for.
       SubtitleStreamIndex: options.subtitleIndex ?? -1,
@@ -178,15 +185,24 @@ export async function getPlaybackDecision(
       EnableDirectPlay: directAllowed,
       EnableDirectStream: !force && !subtitleOn,
       EnableTranscoding: true,
-      ...(options.mediaSourceId ? { MediaSourceId: options.mediaSourceId } : {}),
+      ...(mediaSourceId ? { MediaSourceId: mediaSourceId } : {}),
       ...(audioChosen ? { AudioStreamIndex: options.audioIndex } : {}),
       SubtitleStreamIndex: options.subtitleIndex ?? -1,
     },
   });
 
-  const source = info.MediaSources?.[0];
+  let info = await playbackInfo(options.mediaSourceId);
+  let source = info.MediaSources?.[0];
   if (info.ErrorCode || !source) {
     throw new JellyfinError('no-compatible-stream', `No playable source: ${info.ErrorCode ?? 'empty'}`);
+  }
+  if (!options.mediaSourceId && !subtitleOn && hasSubtitleParam(source.TranscodingUrl)) {
+    // The source id is only known from the answer, so ask again naming it; now the -1 counts.
+    info = await playbackInfo(source.Id);
+    source = info.MediaSources?.[0];
+    if (info.ErrorCode || !source) {
+      throw new JellyfinError('no-compatible-stream', `No playable source: ${info.ErrorCode ?? 'empty'}`);
+    }
   }
 
   const durationMs = source.RunTimeTicks ? ticksToMs(source.RunTimeTicks) : undefined;

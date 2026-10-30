@@ -74,6 +74,20 @@ describe('getPlaybackDecision', () => {
     expect(opens.mode).toBe('url');
   });
 
+  it('asks again naming the source when the server burned in a default subtitle nobody chose', async () => {
+    const burned = { ...AVI_SOURCE, TranscodingUrl: '/videos/item2/master.m3u8?MediaSourceId=src2&SubtitleStreamIndex=2&SubtitleMethod=Encode' };
+    const clean = { ...AVI_SOURCE, TranscodingUrl: '/videos/item2/master.m3u8?MediaSourceId=src2&VideoCodec=hevc' };
+    const { http, calls } = httpWith(url => ({ body: { MediaSources: [url.includes('MediaSourceId=src2') ? clean : burned] } }));
+    const decision = await getPlaybackDecision(http, 'u1', DEFAULT_CAPABILITIES, 'item2');
+
+    expect(calls).toHaveLength(2);
+    expect(calls[1].url).toContain('MediaSourceId=src2');
+    expect(calls[1].url).toContain('SubtitleStreamIndex=-1');
+    expect(calls[1].body.MediaSourceId).toBe('src2');
+    expect(decision.url).not.toContain('SubtitleStreamIndex');
+    expect(decision.selection?.subtitleIndex).toBe(-1);
+  });
+
   it('streams an MKV over HLS when another audio track is chosen, letting the server copy the video', async () => {
     const mkv = { ...AVI_SOURCE, Container: 'mkv' };
     const { http, calls } = httpWith(() => ({ body: { MediaSources: [mkv], PlaySessionId: 'ps3' } }));

@@ -77,6 +77,10 @@ export class PlaybackController {
     try {
       this.decision = await this.deps.provider.getPlayback(item.id, { startMs: item.resumeMs, ...choice });
       console.log(`playback: ${describeDecision(this.decision)}`);
+      console.log(
+        `playback tracks: asked ${JSON.stringify(choice ?? {})}; subtitles ` +
+          (this.decision.tracks?.subtitles ?? []).map(t => `${t.index}:${t.label}${t.isDefault ? ':default' : ''}`).join(' | '),
+      );
       this.defaultAudio = this.decision.defaultAudioIndex ?? this.decision.selection?.audioIndex;
       this.announceTracks();
       await this.deps.engine.load(this.decision, item.resumeMs);
