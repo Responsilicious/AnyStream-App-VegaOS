@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { px, useScale } from '../layout';
 import {
@@ -127,7 +127,7 @@ export function FilterDrawer({ page, tab, caps, facets, applied, draft, draftCou
   ));
 
   let nestedTitle = '';
-  let nestedRows: JSX.Element[] = [];
+  let nestedRows: ReactElement[] = [];
   if (nested === 'genre') {
     nestedTitle = 'Genre';
     nestedRows = facets.genres.map((genre, i) => (
