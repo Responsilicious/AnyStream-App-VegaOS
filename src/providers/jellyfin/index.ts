@@ -5,6 +5,10 @@ import type {
   KindFilter,
   ItemQuery,
   Library,
+  LibraryCapabilities,
+  LibraryFacets,
+  LibraryPage,
+  LibraryView,
   MediaItem,
   MediaProvider,
   MediaVersion,
@@ -38,6 +42,7 @@ import {
   reportStopped,
   stopTranscode,
 } from './playback';
+import { countJellyfinLibrary, fetchLibraryFacets, jellyfinLibraryCapabilities, queryJellyfinLibrary } from './library';
 import { fetchVersions } from './versions';
 
 export class JellyfinProvider implements MediaProvider {
@@ -87,6 +92,22 @@ export class JellyfinProvider implements MediaProvider {
 
   search(term: string, filter: KindFilter): Promise<MediaItem[]> {
     return searchItems(this.http, this.session.userId, term, filter);
+  }
+
+  getLibraryCapabilities(library: Library): Promise<LibraryCapabilities> {
+    return Promise.resolve(jellyfinLibraryCapabilities(library));
+  }
+
+  getLibraryFacets(library: Library, signal?: AbortSignal): Promise<LibraryFacets> {
+    return fetchLibraryFacets(this.http, this.session.userId, library, signal);
+  }
+
+  queryLibrary(library: Library, view: LibraryView, start: number, limit: number, signal?: AbortSignal): Promise<LibraryPage<MediaItem>> {
+    return queryJellyfinLibrary(this.http, this.session.userId, library, view, start, limit, signal);
+  }
+
+  countLibrary(library: Library, view: LibraryView, signal?: AbortSignal): Promise<number | null> {
+    return countJellyfinLibrary(this.http, this.session.userId, library, view, signal);
   }
 
   setPlayed(id: string, played: boolean): Promise<void> {

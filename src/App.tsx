@@ -43,6 +43,8 @@ import { ServerManagerScreen } from './screens/ServerManagerScreen';
 import { SeriesPage } from './screens/SeriesPage';
 import { createDefaultStore } from './storage/keyValueStore';
 import { HiddenContinueStore } from './storage/hiddenStore';
+import { LibraryPrefsStore } from './library/prefsStore';
+import type { BrowseMemory } from './screens/BrowseScreen';
 import { SessionStore } from './storage/sessionStore';
 import { colors } from './theme';
 import { px } from './layout';
@@ -81,6 +83,7 @@ export const App = () => {
   // SessionStore keeps the install id; servers and sign-ins live in ConnectionStore (src/connections/).
   const store = useMemo(() => new SessionStore(kv), [kv]);
   const connections = useMemo(() => new ConnectionStore(kv), [kv]);
+  const libraryPrefs = useMemo(() => new LibraryPrefsStore(kv), [kv]);
   const device = useMemo<DeviceInfo>(
     () => ({ id: store.getDeviceId(), name: DEVICE_NAME, version: APP_VERSION }),
     [store],
@@ -104,6 +107,15 @@ export const App = () => {
   const [authStart, setAuthStart] = useState<AuthStart | undefined>(undefined);
   // The Home card that had focus, kept across screens so Back lands the user where they were.
   const homeFocus = useRef<string | undefined>(undefined);
+  // Movies and Series results and focus, so Back from a title page lands where the user was. Scoped by server,
+  // viewer and library inside, and dropped whenever the server, profile or section changes.
+  const browseMovies = useRef<BrowseMemory | undefined>(undefined);
+  const browseSeries = useRef<BrowseMemory | undefined>(undefined);
+  const browseMemory = useMemo(() => ({ movies: browseMovies, series: browseSeries }), []);
+  const forgetBrowse = useCallback(() => {
+    browseMovies.current = undefined;
+    browseSeries.current = undefined;
+  }, []);
 
   useEffect(() => {
     // The first thing to look at when sizes seem wrong: what the platform says the window is.
@@ -190,9 +202,10 @@ export const App = () => {
       setSession(id ? connections.toSession(id) : undefined);
       setStack(HOME);
       homeFocus.current = undefined;
+      forgetBrowse();
       setStartup('ok');
     },
-    [connections],
+    [connections, forgetBrowse],
   );
 
   /**
@@ -306,9 +319,22 @@ export const App = () => {
   const rememberHomeFocus = useCallback((key: string) => {
     homeFocus.current = key;
   }, []);
-  const select = useCallback((section: Section) => setStack(s => selectSection(s, section)), []);
+  // A top bar choice is a fresh visit: saved filters and sort still apply, but results reload from the server.
+  const select = useCallback(
+    (section: Section) => {
+      forgetBrowse();
+      setStack(s => selectSection(s, section));
+    },
+    [forgetBrowse],
+  );
   // From a title page the top bar leaves the pages and goes to a section.
-  const goSection = useCallback((section: Section) => setStack(goToSection(section)), []);
+  const goSection = useCallback(
+    (section: Section) => {
+      forgetBrowse();
+      setStack(goToSection(section));
+    },
+    [forgetBrowse],
+  );
 
   if (!caps || startup === 'checking') {
     return (
@@ -492,6 +518,8 @@ export const App = () => {
           onServer={openSwitcher}
           serverPreferred={pillFocus}
           onSwitchProfile={session.server.kind === 'plex' ? () => setPanel({ name: 'profiles' }) : undefined}
+          libraryPrefs={libraryPrefs}
+          browseMemory={browseMemory}
         />
       );
   }

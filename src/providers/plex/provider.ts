@@ -6,6 +6,10 @@ import type {
   ItemQuery,
   KindFilter,
   Library,
+  LibraryCapabilities,
+  LibraryFacets,
+  LibraryPage,
+  LibraryView,
   MediaItem,
   MediaProvider,
   MediaVersion,
@@ -31,6 +35,7 @@ import {
   searchItems,
   setPlayed,
 } from './items';
+import { countPlexLibrary, fetchPlexCapabilities, fetchPlexFacets, queryPlexLibrary } from './library';
 import { fetchPlexVersions, getPlexPlayback, reportPlex, stopPlexTranscode } from './playback';
 
 /**
@@ -109,6 +114,33 @@ export class PlexProvider implements MediaProvider {
 
   search(term: string, filter: KindFilter): Promise<MediaItem[]> {
     return searchItems(this.http, term, filter);
+  }
+
+  /** Asked once per library: what the server advertises does not change while the app runs. */
+  private readonly capabilities = new Map<string, Promise<LibraryCapabilities>>();
+
+  getLibraryCapabilities(library: Library, signal?: AbortSignal): Promise<LibraryCapabilities> {
+    const key = `${library.id}:${library.kind}`;
+    let found = this.capabilities.get(key);
+    if (!found) {
+      found = fetchPlexCapabilities(this.http, library, signal);
+      // A failed or cancelled lookup is not remembered, so the next visit asks again.
+      found.catch(() => this.capabilities.delete(key));
+      this.capabilities.set(key, found);
+    }
+    return found;
+  }
+
+  getLibraryFacets(library: Library, signal?: AbortSignal): Promise<LibraryFacets> {
+    return fetchPlexFacets(this.http, library, signal);
+  }
+
+  queryLibrary(library: Library, view: LibraryView, start: number, limit: number, signal?: AbortSignal): Promise<LibraryPage<MediaItem>> {
+    return queryPlexLibrary(this.http, library, view, start, limit, signal);
+  }
+
+  countLibrary(library: Library, view: LibraryView, signal?: AbortSignal): Promise<number | null> {
+    return countPlexLibrary(this.http, library, view, signal);
   }
 
   getPlayback(itemId: string, options?: PlaybackOptions): Promise<PlaybackDecision> {
