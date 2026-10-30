@@ -1,4 +1,5 @@
 import { buildQuery, joinUrl } from '../../util/url';
+import { fromPlexGuids } from '../../search/externalIds';
 import type { GenreTile, ItemPage, ItemQuery, KindFilter, Library, MediaItem } from '../types';
 import type { PlexHttp } from './http';
 
@@ -34,6 +35,10 @@ export interface PlexMetadata {
   addedAt?: number;
   viewedLeafCount?: number;
   Media?: PlexMedia[];
+  /** Legacy agents put their database id here (`com.plexapp.agents.imdb://tt0133093?lang=en`). */
+  guid?: string;
+  /** New agents list database ids here when asked with `includeGuids=1`: `[{ id: 'tmdb://603' }]`. */
+  Guid?: Array<{ id?: string }>;
 }
 
 export interface PlexStream {
@@ -161,6 +166,7 @@ export function mapPlexItem(http: PlexHttp, raw: PlexMetadata): MediaItem {
     backdropUrl: plexImageUrl(http, backdrop, 1280, 720),
     thumbUrl: isEpisode ? plexImageUrl(http, raw.thumb, 480, 270) : undefined,
     landscapeUrl: plexImageUrl(http, wide, LANDSCAPE_WIDTH, 360),
+    externalIds: fromPlexGuids(raw.Guid, raw.guid),
   };
 }
 
@@ -334,13 +340,15 @@ const SEARCH_TYPES: Record<KindFilter, string[]> = {
   episodes: ['episode'],
 };
 
-export async function searchItems(http: PlexHttp, term: string, filter: KindFilter): Promise<MediaItem[]> {
+export async function searchItems(http: PlexHttp, term: string, filter: KindFilter, signal?: AbortSignal): Promise<MediaItem[]> {
   const trimmed = term.trim();
   if (!trimmed) {
     return [];
   }
+  // includeGuids adds the TMDB/IMDb/TVDB list that search groups titles by (docs/cross-server-search.md).
   const response = await http.get<Container<{ Hub?: Array<{ type?: string; Metadata?: PlexMetadata[] }> }>>('/hubs/search', {
-    query: { query: trimmed, limit: 30 },
+    query: { query: trimmed, limit: 30, includeGuids: 1 },
+    signal,
   });
   const wanted = SEARCH_TYPES[filter];
   return (response?.MediaContainer?.Hub ?? [])

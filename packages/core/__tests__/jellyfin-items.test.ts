@@ -229,6 +229,18 @@ describe('Home rows from the provider', () => {
     expect(calls[0].url).toContain('IncludeItemTypes=Movie%2CSeries%2CEpisode');
   });
 
+  it('asks search for provider ids and passes the cancel signal on', async () => {
+    const { calls, provider: p } = provider(() => ({ Items: [{ Id: 'm1', Name: 'The Matrix', Type: 'Movie', ProviderIds: { Tmdb: '603', Imdb: 'tt0133093' } }] }));
+    const [item] = await p.search('matrix', 'movies');
+    expect(calls[0].url).toContain('ProviderIds');
+    expect(item.externalIds).toEqual({ tmdb: '603', imdb: 'tt0133093' });
+    const hung = fakeFetch(() => 'hang');
+    const controller = new AbortController();
+    const pending = createJellyfinProvider(SESSION, DEVICE, DEFAULT_CAPABILITIES, hung.fetchImpl).search('matrix', 'all', controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ kind: 'cancelled' });
+  });
+
   it('narrows a search to one kind, and a blank search asks nothing', async () => {
     const { calls, provider: p } = provider(() => ({ Items: [] }));
     await p.search('space', 'episodes');

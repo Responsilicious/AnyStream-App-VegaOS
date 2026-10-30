@@ -45,6 +45,13 @@ export interface Library {
   kind: 'movies' | 'tvshows' | 'other';
 }
 
+/** Ids from public metadata databases, normalised (search/externalIds.ts). Used to match one title across servers. */
+export interface ExternalIds {
+  tmdb?: string;
+  imdb?: string;
+  tvdb?: string;
+}
+
 export interface MediaItem {
   id: string;
   title: string;
@@ -80,6 +87,8 @@ export interface MediaItem {
   directors?: string[];
   /** 16:9 artwork for Home cards: an episode still, or a title thumb or backdrop. */
   landscapeUrl?: string;
+  /** TMDB, IMDb and TVDB ids when the server reports them. Search results ask for them; other lists may not. */
+  externalIds?: ExternalIds;
 }
 
 /** Which kinds of title a genre reel or a search should include. */
@@ -246,8 +255,8 @@ export interface MediaProvider extends PlaybackProvider {
   getSimilar(id: string): Promise<MediaItem[]>;
   /** Titles in one genre, for a genre reel. Episodes are never included. */
   getByGenre(genre: string, filter: KindFilter, limit: number): Promise<MediaItem[]>;
-  /** Titles matching what was typed. A blank term finds nothing. */
-  search(term: string, filter: KindFilter): Promise<MediaItem[]>;
+  /** Titles matching what was typed, with their external ids where known. A blank term finds nothing. */
+  search(term: string, filter: KindFilter, signal?: AbortSignal): Promise<MediaItem[]>;
   /** Which filters and sorts this library really supports (Movies and Series pages). */
   getLibraryCapabilities(library: Library, signal?: AbortSignal): Promise<LibraryCapabilities>;
   /** The genres this viewer can see in this library, with the server's own ids. */

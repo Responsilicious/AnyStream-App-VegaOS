@@ -97,8 +97,8 @@ export class JellyfinProvider implements MediaProvider {
     return fetchByGenre(this.http, this.session.userId, genre, filter, limit);
   }
 
-  search(term: string, filter: KindFilter): Promise<MediaItem[]> {
-    return searchItems(this.http, this.session.userId, term, filter);
+  search(term: string, filter: KindFilter, signal?: AbortSignal): Promise<MediaItem[]> {
+    return searchItems(this.http, this.session.userId, term, filter, signal);
   }
 
   getLibraryCapabilities(library: Library): Promise<LibraryCapabilities> {

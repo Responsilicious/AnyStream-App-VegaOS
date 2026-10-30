@@ -1,5 +1,6 @@
 import { buildQuery, joinUrl } from '../../util/url';
 import { ticksToMs } from '../../util/ticks';
+import { fromProviderIds } from '../../search/externalIds';
 import type { GenreTile, ItemPage, ItemQuery, KindFilter, Library, MediaItem } from '../types';
 import type { JellyfinHttp } from './http';
 
@@ -26,6 +27,8 @@ export interface JellyfinItem {
   ParentIndexNumber?: number;
   SeriesId?: string;
   SeriesName?: string;
+  /** Only present when `Fields` asks for `ProviderIds`: `{ Tmdb: '603', Imdb: 'tt0133093' }`. */
+  ProviderIds?: Record<string, string>;
 }
 
 interface ItemsResponse {
@@ -122,6 +125,7 @@ export function mapItem(baseUrl: string, raw: JellyfinItem): MediaItem {
     // 300 px wide covers a poster tile at TV scale; the server resizes so the TV never downloads originals.
     posterUrl: primaryTag ? imageUrl(baseUrl, raw.Id, 'Primary', 300, primaryTag) : undefined,
     backdropUrl: backdropTag ? imageUrl(baseUrl, raw.Id, 'Backdrop', 1280, backdropTag) : undefined,
+    externalIds: fromProviderIds(raw.ProviderIds),
   };
 }
 
@@ -336,6 +340,7 @@ export async function searchItems(
   userId: string,
   term: string,
   filter: KindFilter,
+  signal?: AbortSignal,
 ): Promise<MediaItem[]> {
   const trimmed = term.trim();
   if (!trimmed) {
@@ -347,10 +352,12 @@ export async function searchItems(
       IncludeItemTypes: TYPES_FOR_FILTER[filter],
       Recursive: true,
       Limit: SEARCH_LIMIT,
-      Fields: CARD_FIELDS,
+      // ProviderIds lets search group one title found on several servers (docs/cross-server-search.md).
+      Fields: `${CARD_FIELDS},ProviderIds`,
       ...CARD_IMAGES,
       EnableTotalRecordCount: false,
     },
+    signal,
   });
   return response.Items.map(raw => mapItem(http.baseUrl, raw));
 }

@@ -112,8 +112,8 @@ export class PlexProvider implements MediaProvider {
     return fetchByGenre(this.http, genre, filter, limit);
   }
 
-  search(term: string, filter: KindFilter): Promise<MediaItem[]> {
-    return searchItems(this.http, term, filter);
+  search(term: string, filter: KindFilter, signal?: AbortSignal): Promise<MediaItem[]> {
+    return searchItems(this.http, term, filter, signal);
   }
 
   /** Asked once per library: what the server advertises does not change while the app runs. */
