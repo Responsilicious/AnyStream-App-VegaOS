@@ -1,4 +1,6 @@
 import type { ConnectionStatus, ConnectionView } from './connections/model';
+import { isJellyfinError } from './providers/jellyfin/errors';
+import { isPlexError } from './providers/plex/errors';
 import type { PlexConnectionKind, PlexServerInfo, Reachability } from './providers/plex';
 import type { ServerKind } from './providers/types';
 
@@ -75,10 +77,11 @@ export function rowLabel(view: ConnectionView, status: ConnectionStatus): string
   return [view.displayName, connectionSubtitle(view), statusText(status), ...flags].join(', ');
 }
 
-export type ManagerAction = 'switch' | 'rename' | 'startup' | 'clear-startup' | 'sign-in' | 'remove' | 'sign-out-account';
+export type ManagerAction = 'switch' | 'scan' | 'rename' | 'startup' | 'clear-startup' | 'sign-in' | 'remove' | 'sign-out-account';
 
 export const MANAGER_ACTION_LABELS: Record<ManagerAction, string> = {
   switch: 'Switch to this server',
+  scan: 'Scan for new files',
   rename: 'Rename in AnyStream',
   startup: 'Set as startup server',
   'clear-startup': 'Open last used at startup',
@@ -87,8 +90,11 @@ export const MANAGER_ACTION_LABELS: Record<ManagerAction, string> = {
   'sign-out-account': 'Sign out of Plex account',
 };
 
-/** The actions a saved connection's panel offers, most useful first. Account sign-out is a separate link. */
-export function managerActions(view: ConnectionView, status: ConnectionStatus): ManagerAction[] {
+/**
+ * The actions a saved connection's panel offers, most useful first. Account sign-out is a separate link. Scanning
+ * is offered only once the server has said this user may scan (`canScan`) and it is online.
+ */
+export function managerActions(view: ConnectionView, status: ConnectionStatus, canScan = false): ManagerAction[] {
   const actions: ManagerAction[] = [];
   const needsSignIn = status === 'auth-required' || view.account.authStatus === 'expired';
   if (needsSignIn) {
@@ -96,8 +102,37 @@ export function managerActions(view: ConnectionView, status: ConnectionStatus): 
   } else if (!view.active) {
     actions.push('switch');
   }
+  if (canScan && !needsSignIn && status === 'online') {
+    actions.push('scan');
+  }
   actions.push('rename', view.startup ? 'clear-startup' : 'startup', 'remove');
   return actions;
+}
+
+/** What one scan button reports after it is pressed. */
+export type ScanState = 'sending' | 'started' | 'refused' | 'failed';
+
+/** A refused scan says who may scan; any other failure says the server could not be reached. */
+export function scanFailure(error: unknown): ScanState {
+  if ((isJellyfinError(error) || isPlexError(error)) && (error.kind === 'unauthorized' || error.kind === 'forbidden')) {
+    return 'refused';
+  }
+  return 'failed';
+}
+
+/** The line under the scan buttons. `target` is a library's name, or undefined for every library. */
+export function scanStatusText(state: ScanState, target: string | undefined, server: string): string {
+  const what = target ?? 'every library';
+  switch (state) {
+    case 'sending':
+      return `Asking ${server} to scan ${what}…`;
+    case 'started':
+      return `${server} is scanning ${what}. New titles appear when it finishes.`;
+    case 'refused':
+      return `${server} did not allow the scan. Only the server's administrator can scan libraries.`;
+    case 'failed':
+      return `Couldn't reach ${server}. Check it is online and try again.`;
+  }
 }
 
 /** The remove confirmation names exactly what goes, and what stays. */

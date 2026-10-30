@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AuthButton } from '../components/AuthButton';
 import { AuthFrame, authStyles, HeroTitle } from '../components/AuthFrame';
@@ -12,6 +12,7 @@ import { checkConnection } from '../connections/status';
 import { startEdit, type TextEdit } from '../keyboard';
 import { px } from '../layout';
 import type { DeviceInfo } from '../providers/jellyfin/http';
+import type { Library, MediaProvider } from '../providers/types';
 import {
   connectionSubtitle,
   MANAGER_ACTION_LABELS,
@@ -20,11 +21,14 @@ import {
   routeOf,
   routeText,
   rowLabel,
+  scanFailure,
+  scanStatusText,
   signOutMessage,
   startupText,
   statusText,
   type ManagerAction,
   type Route,
+  type ScanState,
 } from '../servers';
 import { colors, spacing, type } from '../theme';
 import { useBack } from '../useBack';
@@ -35,6 +39,8 @@ const LOGO = require('../assets/logo.png');
 interface Props {
   store: ConnectionStore;
   device: DeviceInfo;
+  /** A provider for a saved connection, used here only to check scan rights and start scans. */
+  providerFor: (connectionId: string) => MediaProvider | undefined;
   /** Starts a validated switch; the manager stays open until it succeeds. */
   onSwitch: (connectionId: string) => void;
   onAddServer: () => void;
@@ -48,7 +54,8 @@ type Mode =
   | { name: 'list' }
   | { name: 'confirm-remove'; id: string }
   | { name: 'confirm-sign-out'; id: string }
-  | { name: 'rename'; id: string };
+  | { name: 'rename'; id: string }
+  | { name: 'scan'; id: string };
 
 interface RowState {
   status: ConnectionStatus;
@@ -73,7 +80,7 @@ export function toneFor(status: ConnectionStatus): RowTone {
  * details and actions on the right. Focus can rest on any row without switching to it; Select moves focus
  * into the panel. Exactly one row is Active.
  */
-export function ServerManagerScreen({ store, device, onSwitch, onAddServer, onSignInAgain, onActiveRemoved, onBack }: Props) {
+export function ServerManagerScreen({ store, device, providerFor, onSwitch, onAddServer, onSignInAgain, onActiveRemoved, onBack }: Props) {
   const [views, setViews] = useState<ConnectionView[]>(() => store.list());
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [mode, setMode] = useState<Mode>({ name: 'list' });
@@ -82,6 +89,9 @@ export function ServerManagerScreen({ store, device, onSwitch, onAddServer, onSi
   const [inPanel, setInPanel] = useState(false);
   const [alias, setAlias] = useState<TextEdit>(() => startEdit(''));
   const [keyboard, setKeyboard] = useState(false);
+  // Whether each connection's user may start a library scan, once its server has answered.
+  const [canScan, setCanScan] = useState<Record<string, boolean>>({});
+  const providers = useRef(new Map<string, MediaProvider>());
 
   const reload = useCallback(() => {
     const next = store.list();
@@ -113,6 +123,27 @@ export function ServerManagerScreen({ store, device, onSwitch, onAddServer, onSi
     return () => controller.abort();
   }, [store, device]);
 
+  // Asked once per connection after its server answers, so the scan action appears only for those allowed to scan.
+  const leaving = useRef(new AbortController());
+  useEffect(() => () => leaving.current.abort(), []);
+  useEffect(() => {
+    for (const [id, r] of Object.entries(rows)) {
+      if (r.status !== 'online' || id in canScan || providers.current.has(id)) {
+        continue;
+      }
+      const provider = providerFor(id);
+      if (!provider) {
+        continue;
+      }
+      providers.current.set(id, provider);
+      // A failed check is forgotten, so the next status change asks again.
+      provider.canScanLibraries(leaving.current.signal).then(
+        allowed => setCanScan(s => ({ ...s, [id]: allowed })),
+        () => providers.current.delete(id),
+      );
+    }
+  }, [rows, canScan, providerFor]);
+
   const close = () => setMode({ name: 'list' });
 
   useBack(() => {
@@ -136,6 +167,9 @@ export function ServerManagerScreen({ store, device, onSwitch, onAddServer, onSi
     switch (action) {
       case 'switch':
         onSwitch(id);
+        return;
+      case 'scan':
+        setMode({ name: 'scan', id });
         return;
       case 'sign-in':
         onSignInAgain(view);
@@ -214,6 +248,11 @@ export function ServerManagerScreen({ store, device, onSwitch, onAddServer, onSi
     );
   }
 
+  const scanning = target && mode.name === 'scan' ? providers.current.get(target.connection.id) : undefined;
+  if (target && scanning) {
+    return <ScanPanel provider={scanning} serverName={target.displayName} onDone={close} />;
+  }
+
   const detail = views.find(v => v.connection.id === shown);
 
   return (
@@ -266,7 +305,7 @@ export function ServerManagerScreen({ store, device, onSwitch, onAddServer, onSi
           <Fact label="Connection" value={row(detail.connection.id).route ? routeText(row(detail.connection.id).route as Route) : statusText(row(detail.connection.id).status)} />
           <Fact label="Startup preference" value={startupText(detail)} />
           <View style={styles.rule} />
-          {managerActions(detail, row(detail.connection.id).status).map((action, i) => (
+          {managerActions(detail, row(detail.connection.id).status, canScan[detail.connection.id]).map((action, i) => (
             <AuthButton
               key={action}
               label={MANAGER_ACTION_LABELS[action]}
@@ -287,6 +326,57 @@ export function ServerManagerScreen({ store, device, onSwitch, onAddServer, onSi
           ) : null}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * Settings → Servers → Scan for new files: every library at once, or one. The server does the scanning and
+ * keeps the metadata it already has; this only asks it to start.
+ */
+function ScanPanel({ provider, serverName, onDone }: { provider: MediaProvider; serverName: string; onDone: () => void }) {
+  const [libraries, setLibraries] = useState<Library[]>([]);
+  const [result, setResult] = useState<{ state: ScanState; target?: string }>();
+  // Only the latest press may update the status line.
+  const latest = useRef(0);
+
+  useEffect(() => {
+    let live = true;
+    provider.getLibraries().then(
+      found => live && setLibraries(found),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [provider]);
+
+  const scan = (library?: Library) => {
+    const press = ++latest.current;
+    const target = library?.name;
+    setResult({ state: 'sending', target });
+    provider.scanLibraries(library?.id).then(
+      () => press === latest.current && setResult({ state: 'started', target }),
+      e => press === latest.current && setResult({ state: scanFailure(e), target }),
+    );
+  };
+
+  return (
+    <View style={styles.dialog}>
+      <Text style={styles.dialogTitle} accessibilityRole="header">
+        Scan for new files
+      </Text>
+      <Text style={styles.message}>{`${serverName} looks for files that were added or changed since its last scan. Titles it already has keep their details.`}</Text>
+      <Text style={styles.scanStatus} accessibilityLiveRegion="polite">
+        {result ? scanStatusText(result.state, result.target, serverName) : ' '}
+      </Text>
+      <ScrollView style={styles.scanList}>
+        <FocusButton label="All libraries" primary preferred onPress={() => scan()} style={styles.dialogAction} />
+        {libraries.map(library => (
+          <FocusButton key={library.id} label={library.name} onPress={() => scan(library)} style={styles.dialogAction} />
+        ))}
+        <FocusButton label="Done" onPress={onDone} style={styles.dialogAction} />
+      </ScrollView>
     </View>
   );
 }
@@ -338,6 +428,8 @@ const styles = StyleSheet.create({
   dialogTitle: { color: colors.text, fontSize: type.featured, fontWeight: '800' },
   message: { color: colors.text, fontSize: type.card, marginTop: px(16), maxWidth: px(1200), lineHeight: px(40) },
   dialogActions: { marginTop: spacing.gapLarge },
+  scanStatus: { color: colors.textMuted, fontSize: type.body, marginTop: px(16), minHeight: px(40) },
+  scanList: { flexGrow: 0, marginTop: spacing.gap },
   dialogAction: { marginBottom: spacing.gap, alignSelf: 'flex-start', minWidth: px(520) },
   renameActions: { flexDirection: 'row', alignItems: 'center', marginTop: px(28) },
   renameAction: { marginRight: px(18) },

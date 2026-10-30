@@ -37,6 +37,7 @@ import {
 } from './items';
 import { countPlexLibrary, fetchPlexCapabilities, fetchPlexFacets, queryPlexLibrary } from './library';
 import { fetchPlexVersions, getPlexPlayback, reportPlex, stopPlexTranscode } from './playback';
+import { canScanPlex, scanPlex } from './scan';
 
 /**
  * One Plex media server for one account. The session's token is that server's own access token from
@@ -141,6 +142,14 @@ export class PlexProvider implements MediaProvider {
 
   countLibrary(library: Library, view: LibraryView, signal?: AbortSignal): Promise<number | null> {
     return countPlexLibrary(this.http, library, view, signal);
+  }
+
+  canScanLibraries(signal?: AbortSignal): Promise<boolean> {
+    return canScanPlex(this.http, signal);
+  }
+
+  scanLibraries(libraryId?: string): Promise<void> {
+    return scanPlex(this.http, libraryId);
   }
 
   getPlayback(itemId: string, options?: PlaybackOptions): Promise<PlaybackDecision> {
