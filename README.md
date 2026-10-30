@@ -3,11 +3,13 @@
 A Netflix-style TV client for Jellyfin and Plex servers, built in React Native for Vega OS
 (Amazon Fire TV). Version 0.1.0.
 
-## Status (29 Oct 2026)
+## Status (30 Oct 2026)
 
-Version 0.1.0 is uploaded to the Amazon Appstore for armv7, aarch64 and x86_64, and is in Live
-App Testing and review. Everything below has been checked on a Fire TV Stick 4K Select unless
-marked otherwise.
+Version 0.1.0 is in Amazon Appstore Live App Testing as an armv7 package (latest: build 6, which
+adds Movies and Series filters and sorting). The Developer Console targets all three Vega Fire TV
+sticks from the armv7 package alone, so aarch64 and x86_64 packages are no longer uploaded
+(x86_64 is for the Vega Virtual Device only). Everything below has been checked on a Fire TV
+Stick 4K Select unless marked otherwise.
 
 ## What works
 
@@ -19,12 +21,19 @@ marked otherwise.
   between them.
 - **Browsing:** Home rows with a featured preview, libraries, genres, search, and movie and series
   pages with seasons and episodes.
+- **Filters and sorting on Movies and Series** (new, 30 Oct; installed and launched on the stick,
+  not yet checked against real servers): a Filters & sort panel with genre (any of several),
+  watch status and year, and sorts by title, date added, release or first-aired date, rating and
+  (movies) runtime. Filtering, sorting and paging run on the server across the whole library;
+  Plex offers only what the library advertises. Each page remembers its own choices per server,
+  profile and library, and Back from a title page returns to the same card. Details in
+  `docs/library-filters.md`.
 - **Playback:** direct play where the stick can decode the file (including 4K HEVC), otherwise a
   server transcode delivered as HLS. Audio and subtitle choice from an in-player menu, resume
   position, progress reporting, and a clean stop that ends the server transcode.
 - **Remote:** select toggles play and pause, left and right skip 10 s, back exits.
-- 23 unit test suites (about 360 tests) covering auth, connections, providers, playback
-  decisions, the player engine and controller.
+- 23 unit test suites (400 tests) covering auth, connections, providers, playback decisions, the
+  player engine and controller, and library filters and sorting.
 
 ## Known limitations
 
@@ -41,6 +50,9 @@ marked otherwise.
   Plex account.
 - Some Plex servers' local `plex.direct` HTTPS addresses use a certificate chain the stick doesn't
   trust. Remote or other addresses are used instead.
+- **Filters:** series can't be filtered by "Not started" or "In progress" (neither server supports
+  it server-side), and age rating and video quality filters aren't built yet. Where titles with no
+  date, rating or runtime land in a sort follows each server's own behaviour and is unverified.
 - `announceForAccessibility` does nothing on the stick (Vega's `AccessibilityManager` is missing).
 - Vega-specific workarounds are listed under "Vega quirks" in `AGENTS.md`.
 
@@ -88,6 +100,7 @@ once the Amazon hls.js files above are in place.
 ## Layout
 
 - `src/providers`: the `MediaProvider` interface with Jellyfin and Plex implementations.
+- `src/library`: Movies and Series filter and sort state, saved views, and the query transaction (`BrowseController`).
 - `src/connections`: saved servers and accounts (`ConnectionStore`), and switching between them.
 - `src/player`: `PlayerEngine` (surface, hls.js, URL mode), `PlaybackController` (progress, fallback), `usePlayback`.
 - `src/screens`, `src/components`: the UI.
