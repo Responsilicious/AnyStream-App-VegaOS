@@ -72,6 +72,27 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+/**
+ * Release signing. The upload key lives outside the repo (never commit it). Point the build at a
+ * keystore.properties file with storeFile, storePassword, keyAlias and keyPassword, either through
+ * the ANYSTREAM_KEYSTORE_PROPERTIES environment variable or as android/keystore.properties.
+ * A relative storeFile is resolved next to the properties file. Release builds stop with an error
+ * if no key is configured, so a debug-signed APK can't reach the Appstore by accident.
+ */
+def releaseKeystorePropsFile = rootProject.file(System.getenv('ANYSTREAM_KEYSTORE_PROPERTIES') ?: 'keystore.properties')
+def releaseKeystoreProps = new Properties()
+def hasReleaseKey = releaseKeystorePropsFile.exists()
+if (hasReleaseKey) {
+    releaseKeystorePropsFile.withInputStream { releaseKeystoreProps.load(it) }
+}
+gradle.taskGraph.whenReady { graph ->
+    def wantsRelease = graph.allTasks.any { it.name in ['assembleRelease', 'bundleRelease', 'packageRelease'] }
+    if (wantsRelease && !hasReleaseKey) {
+        throw new GradleException("No release signing key: set ANYSTREAM_KEYSTORE_PROPERTIES or create " +
+            "${releaseKeystorePropsFile}. See README 'Fire OS (Android TV) build'.")
+    }
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -92,15 +113,23 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            if (hasReleaseKey) {
+                def f = new File(releaseKeystoreProps['storeFile'])
+                storeFile f.isAbsolute() ? f : new File(releaseKeystorePropsFile.parentFile, releaseKeystoreProps['storeFile'])
+                storePassword releaseKeystoreProps['storePassword']
+                keyAlias releaseKeystoreProps['keyAlias']
+                keyPassword releaseKeystoreProps['keyPassword']
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Signed with the upload key from keystore.properties (see the top of this file).
+            signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
