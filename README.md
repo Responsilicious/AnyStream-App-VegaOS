@@ -109,6 +109,14 @@ npm run build:debug         # needs JDK 17 and the Android SDK (ANDROID_HOME); A
 adb connect <stick-ip>:5555 && adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
+Release builds for the Appstore are signed with AnyStream's own upload key, which is kept out of git.
+Point the build at its `keystore.properties` (keys `storeFile`, `storePassword`, `keyAlias`,
+`keyPassword`; a relative `storeFile` is read next to the properties file), either with
+`ANYSTREAM_KEYSTORE_PROPERTIES=/path/to/keystore.properties` or by putting the file at
+`apps/fireos/android/keystore.properties`. `npm run build:release` refuses to run without it, so a
+debug-signed APK can't be uploaded by mistake. Every Appstore update must be signed with the same key:
+back up the keystore and its password. The APK lands in `android/app/build/outputs/apk/release/`.
+
 Runs on a Fire TV Stick Lite (Fire OS 7.7, 30 Oct 2026): Jellyfin, Plex and Emby sign-in, switching and
 playback checked there. See AGENTS.md "Fire OS" for what is still unverified.
 
