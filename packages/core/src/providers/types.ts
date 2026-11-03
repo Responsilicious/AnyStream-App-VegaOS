@@ -55,7 +55,10 @@ export interface ExternalIds {
 export interface MediaItem {
   id: string;
   title: string;
-  kind: 'movie' | 'series' | 'season' | 'episode' | 'other';
+  /** 'collection' is a server-made group of titles (a Jellyfin BoxSet): it opens its own page and never plays. */
+  kind: 'movie' | 'series' | 'season' | 'episode' | 'collection' | 'other';
+  /** The server's own name for the item's type ("MusicVideo", "Video"), so an 'other' item can say what it is. */
+  typeName?: string;
   year?: number;
   overview?: string;
   runtimeMs?: number;
@@ -77,6 +80,8 @@ export interface MediaItem {
   seasonIndex?: number;
   seriesId?: string;
   seriesTitle?: string;
+  /** For an episode: the id of its season, when the server says. */
+  seasonId?: string;
   /** Wide still for an episode row. */
   thumbUrl?: string;
   /** When the signed-in user last played this, in epoch milliseconds. */
@@ -112,6 +117,38 @@ export interface ItemQuery {
   genres?: string[];
   /** 'name' is A to Z (the default); 'recent' is newest added first. */
   sort?: 'name' | 'recent';
+}
+
+/**
+ * How a collection's titles are ordered. 'collection' is the order the server keeps for that collection (its own
+ * display-order setting), never a client-side sort; the others are applied by the server across every member.
+ */
+export type CollectionSort = 'collection' | 'titleAsc' | 'titleDesc' | 'releaseAsc' | 'releaseDesc';
+
+/** How the Collections page lists collections. */
+export type CollectionListSort = 'titleAsc' | 'titleDesc';
+
+export interface CollectionListQuery {
+  /** Words typed into the page's own search; blank lists every collection. */
+  search?: string;
+  sort: CollectionListSort;
+}
+
+/**
+ * Read-only browsing of the collections a server already has (Jellyfin BoxSets). Nothing here creates, edits or
+ * plays a collection. Providers that have not implemented it leave `MediaProvider.collections` undefined, and the
+ * app then shows no Collections entry at all.
+ */
+export interface CollectionsSource {
+  /** One page of the collections this viewer can see, across every library, each listed once. */
+  list(query: CollectionListQuery, start: number, limit: number, signal?: AbortSignal): Promise<LibraryPage<MediaItem>>;
+  /** One collection's own metadata (title, overview, artwork). */
+  get(id: string, signal?: AbortSignal): Promise<MediaItem>;
+  /**
+   * One page of the collection's direct members as this viewer may see them: movies, series, seasons, episodes,
+   * nested collections or other items, each with its real kind. Nothing is expanded or flattened.
+   */
+  members(id: string, sort: CollectionSort, start: number, limit: number, signal?: AbortSignal): Promise<LibraryPage<MediaItem>>;
 }
 
 /** What this TV can decode. Built once per launch, then shaped per provider. */
@@ -239,6 +276,8 @@ export interface PlaybackProvider {
 export interface MediaProvider extends PlaybackProvider {
   readonly kind: ServerKind;
   readonly session: Session;
+  /** Server-made collections. Undefined where the provider does not support them yet (Plex and Emby for now). */
+  readonly collections?: CollectionsSource;
   getLibraries(): Promise<Library[]>;
   getItems(query: ItemQuery): Promise<ItemPage>;
   /** One title with its full metadata (cast, genres, rating). */

@@ -5,9 +5,11 @@ import { TopBar } from '../components/TopBar';
 import type { Section } from '../navigation';
 import type { MediaItem, MediaProvider } from '../providers/types';
 import type { LibraryPrefsStore } from '../library/prefsStore';
+import type { CollectionPrefsStore } from '../library/collections';
 import type { HiddenContinueStore } from '../storage/hiddenStore';
 import { colors, spacing, type } from '../theme';
 import { BrowseScreen, type BrowseMemory } from './BrowseScreen';
+import { CollectionsScreen, type CollectionsMemory } from './CollectionsScreen';
 import { GenresScreen } from './GenresScreen';
 import { HomeScreen } from './HomeScreen';
 import { SearchScreen } from './SearchScreen';
@@ -40,6 +42,10 @@ interface Props {
   libraryPrefs: LibraryPrefsStore;
   /** Each page's results and focus, kept while a title page is open. */
   browseMemory: Record<'movies' | 'series', { current: BrowseMemory | undefined }>;
+  /** Saved sort for the Collections page and each collection, apart from the Movies and Series views. */
+  collectionPrefs: CollectionPrefsStore;
+  /** The Collections page's results and focus, kept while a collection is open. */
+  collectionsMemory: { current: CollectionsMemory | undefined };
   /** Cross-server search: its controller lives in App so results survive a title page or a switch. */
   search: SearchProps;
 }
@@ -63,6 +69,8 @@ export function MainScreen({
   onSwitchProfile,
   libraryPrefs,
   browseMemory,
+  collectionPrefs,
+  collectionsMemory,
   search,
 }: Props) {
   // The filter drawer is open: the header gives up focus so the remote stays inside the drawer.
@@ -96,6 +104,7 @@ export function MainScreen({
         onServer={onServer}
         serverPreferred={serverPreferred}
         inert={overlay}
+        showCollections={!!provider.collections}
       />
       {section === 'home' && (
         <HomeScreen
@@ -107,6 +116,7 @@ export function MainScreen({
           onGenre={onGenre}
           hidden={hidden}
           onViewAllContinue={onViewAllContinue}
+          onViewAllCollections={provider.collections ? () => onSection('collections') : undefined}
         />
       )}
       {section === 'movies' && (
@@ -116,6 +126,21 @@ export function MainScreen({
         <BrowseScreen provider={provider} page="series" prefs={libraryPrefs} onOpen={onOpen} memory={browseMemory.series} onOverlay={setOverlay} />
       )}
       {section === 'genres' && <GenresScreen provider={provider} onOpen={onOpen} onGenre={onGenre} />}
+      {section === 'collections' &&
+        (provider.collections ? (
+          <CollectionsScreen
+            provider={provider}
+            source={provider.collections}
+            prefs={collectionPrefs}
+            onOpen={onOpen}
+            memory={collectionsMemory}
+            onOverlay={setOverlay}
+          />
+        ) : (
+          <View style={styles.center}>
+            <Text style={styles.empty}>Collections aren't available for this server in AnyStream yet.</Text>
+          </View>
+        ))}
       {section === 'search' && <SearchScreen {...search} />}
       {section === 'profile' && (
         <View style={styles.center}>

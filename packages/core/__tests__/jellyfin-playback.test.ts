@@ -347,8 +347,11 @@ describe('items', () => {
   });
 
   it('copes with a bare item and an unknown type', () => {
-    const item = mapItem('https://a.com', { Id: 'x', Name: 'X', Type: 'BoxSet' });
+    const item = mapItem('https://a.com', { Id: 'x', Name: 'X', Type: 'MusicVideo' });
     expect(item.kind).toBe('other');
+    expect(item.typeName).toBe('MusicVideo');
+    // A BoxSet is a collection: it gets its own page, never a movie's.
+    expect(mapItem('https://a.com', { Id: 'b', Name: 'B', Type: 'BoxSet' }).kind).toBe('collection');
     expect(item.posterUrl).toBeUndefined();
     expect(item.resumeMs).toBe(0);
     expect(item.played).toBe(false);

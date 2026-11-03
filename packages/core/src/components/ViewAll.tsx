@@ -20,23 +20,40 @@ export function ViewAllLink({ label = 'View all', onPress }: { label?: string; o
   );
 }
 
-/** The last tile of a reel, the same size as a card: a way to the full list for the genre. */
-export function ViewAllTile({ onPress, onFocus }: { onPress: () => void; onFocus?: () => void }) {
+/**
+ * The last tile of a reel, the same size as a card: a way to the full list. 320 × 180 by default (wide cards);
+ * a poster reel passes its own size.
+ */
+export function ViewAllTile({
+  onPress,
+  onFocus,
+  width = 320,
+  height = 180,
+  label = 'View all',
+}: {
+  onPress: () => void;
+  onFocus?: () => void;
+  /** Design pixels. */
+  width?: number;
+  height?: number;
+  /** What a screen reader says, such as "View all collections". */
+  label?: string;
+}) {
   const s = useScale();
   const [focused, setFocused] = useState(false);
   return (
     <Pressable
       focusable
       accessibilityRole="button"
-      accessibilityLabel="View all"
+      accessibilityLabel={label}
       onFocus={() => {
         setFocused(true);
         onFocus?.();
       }}
       onBlur={() => setFocused(false)}
       onPress={onPress}
-      style={[styles.tileOuter, { width: s(320) + 2 * focus.borderWidth }, focused && styles.tileFocused]}>
-      <View style={[styles.tile, { width: s(320), height: s(180) }]}>
+      style={[styles.tileOuter, { width: s(width) + 2 * focus.borderWidth }, focused && styles.tileFocused]}>
+      <View style={[styles.tile, { width: s(width), height: s(height) }]}>
         <Text style={styles.tileText}>{'View all  ›'}</Text>
       </View>
     </Pressable>

@@ -56,6 +56,8 @@ export function jellyfinViewQuery(library: Library, view: LibraryView): Record<s
     ParentId: library.id,
     Recursive: true,
     IncludeItemTypes: library.kind === 'tvshows' ? 'Series' : 'Movie',
+    // Every title on its own card even when the server groups movies or shows into collections (docs/collections.md).
+    CollapseBoxSetItems: false,
     SortBy: field === 'SortName' ? 'SortName' : `${field},SortName`,
     SortOrder: field === 'SortName' ? order : `${order},Ascending`,
   };
