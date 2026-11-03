@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTVEventHandler } from '../platform';
 import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CardMenu } from '../components/CardMenu';
+import { CollectionCard } from '../components/CollectionCard';
 import { FeaturedPreview } from '../components/FeaturedPreview';
 import { FocusButton } from '../components/FocusButton';
 import { GenreCard } from '../components/GenreCard';
@@ -36,7 +37,12 @@ interface Props {
   hidden: HiddenContinueStore;
   /** View all on Continue Playing. */
   onViewAllContinue: () => void;
+  /** View all on the Collections row: the Collections page. Left out where the server has no collections support. */
+  onViewAllCollections?: () => void;
 }
+
+/** Collections on Home: one quiet row, loaded after the rows above so it never delays them. */
+const COLLECTIONS_ROW_LIMIT = 12;
 
 type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
 
@@ -73,8 +79,8 @@ function firstSectionId(home: HomeData): string | undefined {
   return home.genres.length > 0 ? 'genres' : undefined;
 }
 
-/** Every row that exists, top to bottom. */
-function sectionIds(home: HomeData): string[] {
+/** Every row that exists, top to bottom. The Collections row, when it has cards, is last. */
+function sectionIds(home: HomeData, hasCollections: boolean): string[] {
   const ids: string[] = [];
   if (home.continuePlaying.length > 0 || home.continueMore.length > 0) {
     ids.push('continue');
@@ -86,11 +92,17 @@ function sectionIds(home: HomeData): string[] {
   if (home.genres.length > 0) {
     ids.push('genres');
   }
+  if (hasCollections) {
+    ids.push('collections');
+  }
   return ids;
 }
 
 /** The last row that exists, which sits at the very bottom. */
-function lastSectionId(home: HomeData): string | undefined {
+function lastSectionId(home: HomeData, hasCollections: boolean): string | undefined {
+  if (hasCollections) {
+    return 'collections';
+  }
   if (home.genres.length > 0) {
     return 'genres';
   }
@@ -118,9 +130,11 @@ export function HomeScreen({
   onGenre,
   hidden,
   onViewAllContinue,
+  onViewAllCollections,
 }: Props) {
   const s = useScale();
   const [home, setHome] = useState<HomeData | null>(null);
+  const [collections, setCollections] = useState<MediaItem[]>([]);
   const [featured, setFeatured] = useState<MediaItem | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -130,7 +144,8 @@ export function HomeScreen({
 
   // The first row that exists is the one under the preview: focusing it scrolls back to the top.
   const topSection = home ? firstSectionId(home) : undefined;
-  const lastSection = home ? lastSectionId(home) : undefined;
+  const hasCollections = collections.length > 0;
+  const lastSection = home ? lastSectionId(home, hasCollections) : undefined;
   const { scrollRef, onLayout, onScroll, measure, reset, ensureVisible } = useRowScroll(topSection, lastSection);
 
   useEffect(() => {
@@ -171,7 +186,32 @@ export function HomeScreen({
 
   // The row that holds focus, and the rows in order, so a Down press can bring the next row on screen first.
   const focusedSection = useRef<string | undefined>(undefined);
-  const sectionOrder = useMemo(() => (home ? sectionIds(home) : []), [home]);
+  const sectionOrder = useMemo(() => (home ? sectionIds(home, hasCollections) : []), [home, hasCollections]);
+
+  // The Collections row: one small request once the main rows are on screen, never a scan of the library. A failure
+  // or an empty answer just leaves the row out.
+  const homeReady = home !== null;
+  useEffect(() => {
+    const source = provider.collections;
+    if (!homeReady || !source) {
+      setCollections([]);
+      return undefined;
+    }
+    const abort = new AbortController();
+    source.list({ sort: 'titleAsc' }, 0, COLLECTIONS_ROW_LIMIT, abort.signal).then(
+      page => {
+        if (!abort.signal.aborted) {
+          setCollections(page.items);
+        }
+      },
+      () => {
+        if (!abort.signal.aborted) {
+          setCollections([]);
+        }
+      },
+    );
+    return () => abort.abort();
+  }, [provider, homeReady]);
 
   useTVEventHandler(event => {
     if (event.eventType !== 'down' || event.eventKeyAction === 1) {
@@ -413,9 +453,59 @@ export function HomeScreen({
           />
         </View>
       )}
+
+      {hasCollections && (
+        <View style={styles.section} onLayout={measure('collections')}>
+          <Text style={[styles.heading, { paddingHorizontal: margin }]}>Collections</Text>
+          <FlatList
+            horizontal
+            data={collections}
+            keyExtractor={item => `collection:${item.id}`}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: margin, paddingVertical: px(8) }}
+            ItemSeparatorComponent={() => <View style={{ width: gap }} />}
+            ListFooterComponent={
+              onViewAllCollections ? (
+                <View style={{ marginLeft: gap }}>
+                  <ViewAllTile
+                    width={COLLECTION_CARD_WIDTH}
+                    height={COLLECTION_CARD_WIDTH * 1.5}
+                    label="View all collections"
+                    onFocus={() => focusCard('collections', 'collections:all')}
+                    onPress={() => {
+                      onFocusKey('collections:all');
+                      onViewAllCollections();
+                    }}
+                  />
+                </View>
+              ) : null
+            }
+            renderItem={({ item }) => {
+              const key = `collection:${item.id}`;
+              return (
+                <CollectionCard
+                  title={item.title}
+                  imageUrl={item.posterUrl}
+                  width={s(COLLECTION_CARD_WIDTH)}
+                  spokenLabel={`${item.title}, collection`}
+                  preferred={key === preferredKey}
+                  onFocus={() => focusCard('collections', key)}
+                  onPress={() => {
+                    onFocusKey(key);
+                    onOpen(item);
+                  }}
+                />
+              );
+            }}
+          />
+        </View>
+      )}
     </ScrollView>
   );
 }
+
+/** Poster width on the Collections row, in design pixels: portrait art, as on the Collections page. */
+const COLLECTION_CARD_WIDTH = 200;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },

@@ -98,6 +98,7 @@ Run `npm run typecheck && npm test` before calling any change done.
 App.tsx  ── probes device codecs, loads session, picks a screen
   ├─ screens/AuthFlow          Welcome → Connect (network search) → Sign in or Quick Connect (docs/sign-in.md)
   ├─ screens/BrowseScreen      Movies / Series: library tabs, Filters & Sort drawer, chips, paged grid (docs/library-filters.md)
+  ├─ screens/CollectionsScreen Jellyfin collections: search, sort, poster grid; CollectionScreen for one collection (docs/collections.md)
   ├─ screens/LibraryScreen     plain poster grid (genre pages)
   └─ screens/PlayerScreen      video surface, captions, remote keys
          └─ player/usePlayback (React binding)
@@ -109,6 +110,7 @@ providers/jellyfin/ http client, probe, auth, items, playback decision, DevicePr
 providers/emby/     Emby-only calls (public users); browsing and playback reuse providers/jellyfin (docs/emby.md)
 storage/            SessionStore over KeyValueStore (MMKV on device, MemoryStore fallback)
 library/            filter/sort state, saved views per server/viewer/library/page, query transaction (BrowseController)
+                    collections.ts: collection sorts, saved sorts, member routing (read-only; never plays or writes)
 search/             cross-server search: external ids, matching, SearchController, sources/labels (docs/cross-server-search.md)
 util/               url candidates/query building, Jellyfin ticks, device id
 config.ts, theme.ts constants and the 10-foot UI palette/sizes

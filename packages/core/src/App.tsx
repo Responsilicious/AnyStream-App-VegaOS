@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, Image, StyleSheet, View } from 'react-native';
+import { BackHandler, Image, StyleSheet, Text, View } from 'react-native';
 import { EXPIRED_NOTICE, type AuthStart } from './authFlow';
 import { APP_VERSION, DEVICE_NAME, SEARCH_CONCURRENCY, SEARCH_SESSION_ENTRIES, SEARCH_SOURCE_DEADLINE_MS, STORE_BUILD } from './config';
 import { describeWindow } from './layout';
@@ -19,9 +19,12 @@ import {
   goBack,
   goToSection,
   HOME,
+  collectionTrail,
+  openCollection,
   openContinue,
   openGenre,
   openItem,
+  openSeries,
   playItem,
   selectSection,
   type RouteStack,
@@ -32,6 +35,7 @@ import { SEARCH_DEBOUNCE_MS } from './search';
 import { findAlternatives, SearchController } from './search/controller';
 import type { SearchSource, SourceHit } from './search/model';
 import { classifySearchError, copyChoices, defaultScope, searchSources, sourceLabels } from './search/sources';
+import { FocusButton } from './components/FocusButton';
 import { SourceMenu } from './components/SourceMenu';
 import { AddServerFlow } from './screens/AddServerFlow';
 import { AuthFlow } from './screens/AuthFlow';
@@ -48,9 +52,12 @@ import { SeriesPage } from './screens/SeriesPage';
 import { platform } from './platform';
 import { HiddenContinueStore } from './storage/hiddenStore';
 import { LibraryPrefsStore } from './library/prefsStore';
+import { CollectionPrefsStore, type MemberTarget } from './library/collections';
 import type { BrowseMemory } from './screens/BrowseScreen';
+import { CollectionScreen, type CollectionPageMemory } from './screens/CollectionScreen';
+import type { CollectionsMemory } from './screens/CollectionsScreen';
 import { SessionStore } from './storage/sessionStore';
-import { colors } from './theme';
+import { colors, type } from './theme';
 import { px } from './layout';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -88,6 +95,7 @@ export const App = () => {
   const store = useMemo(() => new SessionStore(kv), [kv]);
   const connections = useMemo(() => new ConnectionStore(kv), [kv]);
   const libraryPrefs = useMemo(() => new LibraryPrefsStore(kv), [kv]);
+  const collectionPrefs = useMemo(() => new CollectionPrefsStore(kv), [kv]);
   const device = useMemo<DeviceInfo>(
     () => ({ id: store.getDeviceId(), name: DEVICE_NAME, version: APP_VERSION }),
     [store],
@@ -122,9 +130,14 @@ export const App = () => {
   const browseMovies = useRef<BrowseMemory | undefined>(undefined);
   const browseSeries = useRef<BrowseMemory | undefined>(undefined);
   const browseMemory = useMemo(() => ({ movies: browseMovies, series: browseSeries }), []);
+  // The Collections page and each open collection page (keyed by its place on the stack), kept the same way.
+  const collectionsMemory = useRef<CollectionsMemory | undefined>(undefined);
+  const collectionPages = useRef(new Map<string, CollectionPageMemory>());
   const forgetBrowse = useCallback(() => {
     browseMovies.current = undefined;
     browseSeries.current = undefined;
+    collectionsMemory.current = undefined;
+    collectionPages.current.clear();
   }, []);
 
   // Cross-server search (docs/cross-server-search.md). It lives here, above the screens, so the query, results and
@@ -469,6 +482,29 @@ export const App = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageKey, activeId, searchController, providerFor]);
   const play = useCallback((item: MediaItem, choice?: StartChoice) => setStack(s => playItem(s, item, choice)), []);
+  // A collection member with a page of its own. Nothing here plays (docs/collections.md section 4).
+  const openMember = useCallback((target: Exclude<MemberTarget, { to: 'resolve' } | { to: 'unsupported' }>) => {
+    setStack(s => {
+      switch (target.to) {
+        case 'detail':
+          return openItem(s, target.item);
+        case 'collection':
+          return openCollection(s, target.item);
+        default:
+          return openSeries(s, target.series, { episodeId: target.episodeId, season: target.season });
+      }
+    });
+  }, []);
+  // A collection page's record lives while the page is on the stack, and goes when Back leaves it.
+  useEffect(() => {
+    for (const key of [...collectionPages.current.keys()]) {
+      const [depth, id] = [Number(key.slice(0, key.indexOf(':'))), key.slice(key.indexOf(':') + 1)];
+      const route = stack[depth];
+      if (!route || route.name !== 'collection' || route.item.id !== id) {
+        collectionPages.current.delete(key);
+      }
+    }
+  }, [stack]);
   const back = useCallback(() => setStack(s => goBack(s)), []);
   const hidden = useMemo(
     () => (session ? new HiddenContinueStore(kv, `${session.server.id}.${session.userId}`) : null),
@@ -660,6 +696,14 @@ export const App = () => {
     );
   }
 
+  const nav = {
+    active: activeSection(stack),
+    profileName: provider.session.userName,
+    backLabel: backLabel(stack),
+    onSection: goSection,
+    showCollections: !!provider.collections,
+  };
+
   switch (route.name) {
     case 'player':
       return <PlayerScreen provider={provider} item={route.item} choice={route.choice} onExit={back} />;
@@ -668,7 +712,7 @@ export const App = () => {
         <MoviePage
           provider={provider}
           item={route.item}
-          nav={{ active: activeSection(stack), profileName: provider.session.userName, backLabel: backLabel(stack), onSection: goSection }}
+          nav={nav}
           onPlay={play}
           onOpen={open}
           onBack={back}
@@ -681,12 +725,45 @@ export const App = () => {
           provider={provider}
           series={route.item}
           entryEpisodeId={route.episodeId}
-          nav={{ active: activeSection(stack), profileName: provider.session.userName, backLabel: backLabel(stack), onSection: goSection }}
+          entrySeason={route.season}
+          nav={nav}
           onPlay={play}
           onBack={back}
           alsoOn={alsoOnButton}
         />
       );
+    case 'collection': {
+      const source = provider.collections;
+      const depth = stack.length - 1;
+      const pageKey = `${depth}:${route.item.id}`;
+      if (!source) {
+        // A server switch always lands on Home, so this only guards against a stale stack.
+        return (
+          <View style={styles.splash}>
+            <Text style={styles.message}>Collections aren't available for this server in AnyStream yet.</Text>
+            <FocusButton label="Back" primary preferred onPress={back} />
+          </View>
+        );
+      }
+      return (
+        <CollectionScreen
+          key={pageKey}
+          provider={provider}
+          source={source}
+          prefs={collectionPrefs}
+          collection={route.item}
+          loop={route.loop}
+          trail={collectionTrail(stack.slice(0, -1))}
+          nav={{ ...nav, backLabel: backLabel(stack) }}
+          onOpenMember={openMember}
+          onBack={back}
+          memory={{
+            get: () => collectionPages.current.get(pageKey),
+            set: m => collectionPages.current.set(pageKey, m),
+          }}
+        />
+      );
+    }
     case 'genre':
       return <GenreScreen provider={provider} genre={route.genre} onOpen={open} onBack={back} />;
     case 'continue':
@@ -711,6 +788,8 @@ export const App = () => {
           onSwitchProfile={session.server.kind === 'plex' ? () => setPanel({ name: 'profiles' }) : undefined}
           libraryPrefs={libraryPrefs}
           browseMemory={browseMemory}
+          collectionPrefs={collectionPrefs}
+          collectionsMemory={collectionsMemory}
           search={{
             controller: searchController,
             activeKey: activeId,
@@ -733,4 +812,5 @@ function serverRecord(view: ConnectionView): ServerRecord {
 const styles = StyleSheet.create({
   splash: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
   splashLogo: { width: px(720), height: px(240) },
+  message: { color: colors.textMuted, fontSize: type.body, textAlign: 'center', marginBottom: px(32) },
 });

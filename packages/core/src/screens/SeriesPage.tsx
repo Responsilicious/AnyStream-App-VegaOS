@@ -37,7 +37,9 @@ interface Props {
   series: MediaItem;
   /** Set when the user came from a card that stands for one episode (Continue Playing, Up Next, a search hit). */
   entryEpisodeId?: string;
-  nav: { active: Section; profileName: string; backLabel: string; onSection: (section: Section) => void };
+  /** Set when the user came from a season card (a collection member): that season opens selected. */
+  entrySeason?: number;
+  nav: { active: Section; profileName: string; backLabel: string; onSection: (section: Section) => void; showCollections?: boolean };
   /** `choice` carries the version and tracks picked on this page, when they differ from the defaults. */
   onPlay: (episode: MediaItem, choice?: StartChoice) => void;
   onBack: () => void;
@@ -50,7 +52,7 @@ interface Props {
  * actions beneath, a still of that episode on the right, and a season selector over an episode row. Selecting
  * an episode changes everything about the selection at once and never plays it.
  */
-export function SeriesPage({ provider, series, entryEpisodeId, nav, onPlay, onBack, alsoOn }: Props) {
+export function SeriesPage({ provider, series, entryEpisodeId, entrySeason, nav, onPlay, onBack, alsoOn }: Props) {
   const s = useScale();
   const [full, setFull] = useState<MediaItem>(series);
   const [episodes, setEpisodes] = useState<MediaItem[] | null>(null);
@@ -102,7 +104,7 @@ export function SeriesPage({ provider, series, entryEpisodeId, nav, onPlay, onBa
         if (cancelled) {
           return;
         }
-        const first = initialEpisode(found, entryEpisodeId);
+        const first = initialEpisode(found, entryEpisodeId, entrySeason);
         setEpisodes(found);
         setSelectedId(first?.id);
         setSeason(first?.seasonIndex ?? 1);
@@ -115,7 +117,7 @@ export function SeriesPage({ provider, series, entryEpisodeId, nav, onPlay, onBa
     return () => {
       cancelled = true;
     };
-  }, [provider, series.id, entryEpisodeId, attempt]);
+  }, [provider, series.id, entryEpisodeId, entrySeason, attempt]);
 
   const selected = useMemo(() => episodes?.find(e => e.id === selectedId), [episodes, selectedId]);
 
@@ -231,7 +233,7 @@ export function SeriesPage({ provider, series, entryEpisodeId, nav, onPlay, onBa
 
   return (
     <View style={styles.screen}>
-      <TopBar active={nav.active} profileName={nav.profileName} onSelect={nav.onSection} />
+      <TopBar active={nav.active} profileName={nav.profileName} onSelect={nav.onSection} showCollections={nav.showCollections} />
       <ScrollView contentContainerStyle={{ paddingBottom: s(60) }}>
         <View style={{ paddingHorizontal: s(96) }}>
           <BackLink label={nav.backLabel} onPress={onBack} />

@@ -24,7 +24,7 @@ interface Props {
   provider: MediaProvider;
   /** The poster or card that was chosen: shown straight away while the full record loads. */
   item: MediaItem;
-  nav: { active: Section; profileName: string; backLabel: string; onSection: (section: Section) => void };
+  nav: { active: Section; profileName: string; backLabel: string; onSection: (section: Section) => void; showCollections?: boolean };
   /** `choice` carries the version and tracks picked on this page, when they differ from the defaults. */
   onPlay: (item: MediaItem, choice?: StartChoice) => void;
   /** A title in More like this was chosen. */
@@ -184,7 +184,7 @@ export function MoviePage({ provider, item, nav, onPlay, onOpen, onBack, alsoOn 
 
   return (
     <View style={styles.screen}>
-      <TopBar active={nav.active} profileName={nav.profileName} onSelect={nav.onSection} />
+      <TopBar active={nav.active} profileName={nav.profileName} onSelect={nav.onSection} showCollections={nav.showCollections} />
       <ScrollView contentContainerStyle={{ paddingBottom: s(60) }}>
         <View style={{ paddingHorizontal: s(96) }}>
           <BackLink label={nav.backLabel} onPress={onBack} />

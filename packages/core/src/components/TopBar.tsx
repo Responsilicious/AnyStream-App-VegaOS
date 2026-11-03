@@ -19,13 +19,18 @@ interface Props {
   serverPreferred?: boolean;
   /** A panel is open below (the library filter drawer): nothing here may take focus. */
   inert?: boolean;
+  /** The server supports collections: Collections follows Genres. Left out, there is no entry for it at all. */
+  showCollections?: boolean;
 }
 
-const ITEMS: Array<{ section: 'home' | 'movies' | 'series' | 'genres'; label: string }> = [
+type BarSection = 'home' | 'movies' | 'series' | 'genres' | 'collections';
+
+const ITEMS: Array<{ section: BarSection; label: string }> = [
   { section: 'home', label: 'Home' },
   { section: 'movies', label: 'Movies' },
   { section: 'series', label: 'Series' },
   { section: 'genres', label: 'Genres' },
+  { section: 'collections', label: 'Collections' },
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -33,8 +38,12 @@ const LOGO = require('../assets/logo.png');
 /** The logo file is 3:1 with some clear margin around the mark and wordmark. */
 const LOGO_ASPECT = 3;
 
-/** Logo, then Home, Movies, Series and Genres; Search and the profile avatar sit at the right (docs/design/home-mockup.png). */
-export function TopBar({ active, profileName, onSelect, preferred, serverName, onServer, serverPreferred, inert }: Props) {
+/**
+ * Logo, then Home, Movies, Series, Genres and (where the server supports them) Collections; Search and the profile avatar sit at the right (docs/design/home-mockup.png).
+ * With Collections and a long server name the bar is about 1780 of 1920 design pixels wide: the server pill is capped
+ * at 420 and shortens its name, so the bar never overflows (docs/collections.md).
+ */
+export function TopBar({ active, profileName, onSelect, preferred, serverName, onServer, serverPreferred, inert, showCollections }: Props) {
   const s = useScale();
   const initial = (profileName.trim()[0] ?? '?').toUpperCase();
   return (
@@ -46,7 +55,7 @@ export function TopBar({ active, profileName, onSelect, preferred, serverName, o
           style={{ height: s(64), width: s(64) * LOGO_ASPECT, marginRight: s(16) }}
           resizeMode="contain"
         />
-        {ITEMS.map(entry => (
+        {ITEMS.filter(entry => entry.section !== 'collections' || showCollections).map(entry => (
           <TopBarItem
             key={entry.section}
             label={entry.label}

@@ -1,4 +1,5 @@
 import type {
+  CollectionsSource,
   DeviceCapabilities,
   ServerRecord,
   GenreTile,
@@ -46,6 +47,7 @@ import {
 import { countJellyfinLibrary, fetchLibraryFacets, jellyfinLibraryCapabilities, queryJellyfinLibrary } from './library';
 import { canScanJellyfin, scanJellyfin } from './scan';
 import { fetchVersions } from './versions';
+import { jellyfinCollections } from './collections';
 
 /**
  * Jellyfin, and Emby through the same code: Jellyfin forked from Emby and the two still share the item,
@@ -53,6 +55,11 @@ import { fetchVersions } from './versions';
  */
 export class JellyfinProvider implements MediaProvider {
   readonly kind: 'jellyfin' | 'emby';
+  /**
+   * Jellyfin only for now. Emby has BoxSets too, but its member order and visibility rules have not been checked,
+   * so an Emby server shows no Collections entry rather than one that may be wrong (docs/collections.md).
+   */
+  readonly collections?: CollectionsSource;
 
   constructor(
     readonly session: Session,
@@ -60,6 +67,7 @@ export class JellyfinProvider implements MediaProvider {
     private readonly caps: DeviceCapabilities,
   ) {
     this.kind = http.dialect;
+    this.collections = http.dialect === 'jellyfin' ? jellyfinCollections(http, session.userId) : undefined;
   }
 
   getLibraries(): Promise<Library[]> {

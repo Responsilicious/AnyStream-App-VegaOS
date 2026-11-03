@@ -85,13 +85,22 @@ export function pickNextUnwatched(episodes: MediaItem[]): MediaItem | undefined 
 /**
  * Which episode opens selected (docs/title-pages.md section 3). `entryEpisodeId` is set when the user came
  * from a card that stands for one episode: Continue Playing, Up Next or an episode search result.
+ * `entrySeason` is set when the card stood for a season.
  * Specials are kept out of the automatic choice unless the series has nothing else.
  */
-export function initialEpisode(episodes: MediaItem[], entryEpisodeId?: string): MediaItem | undefined {
+export function initialEpisode(episodes: MediaItem[], entryEpisodeId?: string, entrySeason?: number): MediaItem | undefined {
   if (entryEpisodeId) {
     const exact = episodes.find(e => e.id === entryEpisodeId);
     if (exact) {
       return exact;
+    }
+  }
+  if (entrySeason !== undefined) {
+    // Opened for one season (a collection member): the same choice, made within that season. A season the series
+    // no longer has falls through to the usual choice.
+    const inSeason = episodes.filter(e => (e.seasonIndex ?? 1) === entrySeason);
+    if (inSeason.length > 0) {
+      return initialEpisode(inSeason);
     }
   }
   const regular = sortEpisodes(episodes).filter(e => !isSpecial(e));

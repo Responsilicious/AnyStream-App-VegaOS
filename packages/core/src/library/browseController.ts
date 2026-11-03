@@ -8,14 +8,14 @@ import { canonicalKey } from './viewState';
  * superseded count or a page of a previous view can never land on the current one.
  */
 
-export interface BrowseSource<T> {
-  query(view: LibraryView, start: number, limit: number, signal: AbortSignal): Promise<LibraryPage<T>>;
+export interface BrowseSource<T, V = LibraryView> {
+  query(view: V, start: number, limit: number, signal: AbortSignal): Promise<LibraryPage<T>>;
   /** Exact match count for a draft, or null. Left out when the server cannot count. */
-  count?(view: LibraryView, signal: AbortSignal): Promise<number | null>;
+  count?(view: V, signal: AbortSignal): Promise<number | null>;
 }
 
-export interface BrowseState<T> {
-  applied: LibraryView;
+export interface BrowseState<T, V = LibraryView> {
+  applied: V;
   items: T[];
   /** Exact total for `applied`, or null when the server did not say. */
   total: number | null;
@@ -33,25 +33,30 @@ export interface Timers {
   clearTimeout(handle: unknown): void;
 }
 
-export interface BrowseOptions {
+export interface BrowseOptions<V = LibraryView> {
   pageSize: number;
   /** Called once a view's first page has loaded: the place to save it. Never called for failed or superseded work. */
-  onCommit?: (view: LibraryView) => void;
+  onCommit?: (view: V) => void;
   /** Count previews wait this long after the last draft edit. */
   countDebounceMs?: number;
   timers?: Timers;
+  /**
+   * Names a view, so a page that arrives after the view changed is recognised and dropped. Defaults to the library
+   * filter key; other pages (Collections) pass their own.
+   */
+  keyOf?: (view: V) => string;
 }
 
-type Listener<T> = (state: BrowseState<T>) => void;
+type Listener<T, V> = (state: BrowseState<T, V>) => void;
 
 const realTimers: Timers = {
   setTimeout: (fn, ms) => setTimeout(fn, ms),
   clearTimeout: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
 
-export class BrowseController<T> {
-  private state: BrowseState<T>;
-  private listeners = new Set<Listener<T>>();
+export class BrowseController<T, V = LibraryView> {
+  private state: BrowseState<T, V>;
+  private listeners = new Set<Listener<T, V>>();
   private applySeq = 0;
   private applying: AbortController | undefined;
   /** Bumped on every commit: a page fetched for an earlier commit is thrown away. */
@@ -62,21 +67,23 @@ export class BrowseController<T> {
   private countTimer: unknown;
   private disposed = false;
   private readonly timers: Timers;
+  private readonly keyOf: (view: V) => string;
 
   constructor(
-    private readonly source: BrowseSource<T>,
-    private readonly options: BrowseOptions,
-    initial: LibraryView,
+    private readonly source: BrowseSource<T, V>,
+    private readonly options: BrowseOptions<V>,
+    initial: V,
   ) {
     this.timers = options.timers ?? realTimers;
+    this.keyOf = options.keyOf ?? (view => canonicalKey(view as unknown as LibraryView));
     this.state = { applied: initial, items: [], total: null, loaded: false, loadingMore: false, exhausted: false };
   }
 
-  getState(): BrowseState<T> {
+  getState(): BrowseState<T, V> {
     return this.state;
   }
 
-  subscribe(listener: Listener<T>): () => void {
+  subscribe(listener: Listener<T, V>): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
@@ -90,7 +97,7 @@ export class BrowseController<T> {
    * Puts back results the page had before it was left (Back from a title page), without asking the server again.
    * Only for the same view; anything else must go through `apply`.
    */
-  restore(state: BrowseState<T>): void {
+  restore(state: BrowseState<T, V>): void {
     this.generation += 1;
     this.state = { ...state, loadingMore: false };
     this.emit();
@@ -100,7 +107,7 @@ export class BrowseController<T> {
    * Fetches the first page of `view` and, if that succeeds and nothing newer started meanwhile, makes it the
    * applied view. On failure the current view and results are untouched.
    */
-  async apply(view: LibraryView): Promise<ApplyResult> {
+  async apply(view: V): Promise<ApplyResult> {
     if (this.disposed) {
       return { outcome: 'superseded' };
     }
@@ -153,14 +160,14 @@ export class BrowseController<T> {
       return;
     }
     const generation = this.generation;
-    const key = canonicalKey(applied);
+    const key = this.keyOf(applied);
     const controller = new AbortController();
     this.more = controller;
     this.state = { ...this.state, loadingMore: true };
     this.emit();
     try {
       const page = await this.source.query(applied, items.length, this.options.pageSize, controller.signal);
-      if (generation !== this.generation || this.disposed || canonicalKey(this.state.applied) !== key) {
+      if (generation !== this.generation || this.disposed || this.keyOf(this.state.applied) !== key) {
         return;
       }
       const seen = new Set(this.state.items.map(identity));
@@ -192,7 +199,7 @@ export class BrowseController<T> {
    * Asks for an exact count of `draft` once edits pause. `onCount` gets the number, or null when the server
    * cannot say or the request failed. Only the newest request ever reports.
    */
-  previewCount(draft: LibraryView, onCount: (count: number | null) => void): void {
+  previewCount(draft: V, onCount: (count: number | null) => void): void {
     this.cancelPreview();
     const count = this.source.count;
     if (!count || this.disposed) {

@@ -27,6 +27,8 @@ export interface JellyfinItem {
   ParentIndexNumber?: number;
   SeriesId?: string;
   SeriesName?: string;
+  /** On an episode: its season. */
+  SeasonId?: string;
   /** Only present when `Fields` asks for `ProviderIds`: `{ Tmdb: '603', Imdb: 'tt0133093' }`. */
   ProviderIds?: Record<string, string>;
 }
@@ -41,6 +43,7 @@ const KIND_BY_TYPE: Record<string, MediaItem['kind']> = {
   Series: 'series',
   Season: 'season',
   Episode: 'episode',
+  BoxSet: 'collection',
 };
 
 export function imageUrl(
@@ -103,6 +106,7 @@ export function mapItem(baseUrl: string, raw: JellyfinItem): MediaItem {
     id: raw.Id,
     title: raw.Name,
     kind,
+    typeName: raw.Type,
     genres: raw.Genres && raw.Genres.length > 0 ? raw.Genres : undefined,
     officialRating: raw.OfficialRating,
     communityRating: raw.CommunityRating,
@@ -111,6 +115,7 @@ export function mapItem(baseUrl: string, raw: JellyfinItem): MediaItem {
     seasonIndex: raw.ParentIndexNumber,
     seriesId: raw.SeriesId,
     seriesTitle: raw.SeriesName,
+    seasonId: raw.SeasonId,
     // An episode's primary image is a landscape still, so it doubles as the row thumbnail.
     thumbUrl: kind === 'episode' && primaryTag ? imageUrl(baseUrl, raw.Id, 'Primary', 480, primaryTag) : undefined,
     landscapeUrl: landscapeUrl(baseUrl, raw, kind),
@@ -153,6 +158,8 @@ export async function fetchItems(
       ParentId: query.parentId,
       Recursive: true,
       IncludeItemTypes: 'Movie,Series',
+      // Titles stay individual even when the server groups them into collections; collections have their own page.
+      CollapseBoxSetItems: false,
       SortBy: query.sort === 'recent' ? 'DateCreated' : 'SortName',
       SortOrder: query.sort === 'recent' ? 'Descending' : 'Ascending',
       Fields: 'Overview,ProductionYear,RunTimeTicks',
@@ -320,6 +327,7 @@ export async function fetchByGenre(
       Genres: genre,
       IncludeItemTypes: types,
       Recursive: true,
+      CollapseBoxSetItems: false,
       // Newest added first: a genre reel is for finding what is new, not for browsing A to Z.
       SortBy: 'DateCreated',
       SortOrder: 'Descending',
