@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MediaItem, PlaybackProvider, StartChoice, TrackInfo, TrackSelection } from '../providers/types';
+import type { AudioOutput, MediaItem, PlaybackProvider, StartChoice, TrackInfo, TrackSelection } from '../providers/types';
 import { SEEK_STEP_MS } from '../config';
 import { platform } from '../platform';
 import { PlaybackController } from './PlaybackController';
@@ -24,10 +24,17 @@ export interface PlaybackView {
   selection: TrackSelection | undefined;
   /** Switches track; rejects with a readable message when the server cannot make that stream. */
   changeTracks(change: Partial<TrackSelection>): Promise<void>;
+  /** Restreams for stereo or surround speakers at the current position; rejects as `changeTracks` does. */
+  changeAudioOutput(output: AudioOutput): Promise<void>;
 }
 
 /** React binding for one viewing. Mount it, give the surface props to the video view, unmount to stop. */
-export function usePlayback(provider: PlaybackProvider, item: MediaItem, choice?: StartChoice): PlaybackView {
+export function usePlayback(
+  provider: PlaybackProvider,
+  item: MediaItem,
+  choice?: StartChoice,
+  audioOutput?: AudioOutput,
+): PlaybackView {
   const [state, setState] = useState<EngineState>('loading');
   const [positionMs, setPositionMs] = useState(item.resumeMs);
   const [durationMs, setDurationMs] = useState(item.runtimeMs ?? 0);
@@ -42,11 +49,13 @@ export function usePlayback(provider: PlaybackProvider, item: MediaItem, choice?
   const captionsRef = useRef<string | null>(null);
   // Read once at the start: the choice belongs to this viewing, and changing it later goes through changeTracks.
   const choiceRef = useRef(choice);
+  // Also read once: a later change goes through changeAudioOutput, which keeps the position.
+  const audioOutputRef = useRef(audioOutput);
 
   useEffect(() => {
     let cancelled = false;
     const engine = platform().createPlayerEngine();
-    const controller = new PlaybackController({ provider, engine });
+    const controller = new PlaybackController({ provider, engine, audioOutput: audioOutputRef.current });
     engineRef.current = engine;
     controllerRef.current = controller;
 
@@ -128,6 +137,9 @@ export function usePlayback(provider: PlaybackProvider, item: MediaItem, choice?
   const changeTracks = useCallback(async (change: Partial<TrackSelection>) => {
     await controllerRef.current?.changeTracks(change);
   }, []);
+  const changeAudioOutput = useCallback(async (output: AudioOutput) => {
+    await controllerRef.current?.changeAudioOutput(output);
+  }, []);
 
   return {
     state,
@@ -145,5 +157,6 @@ export function usePlayback(provider: PlaybackProvider, item: MediaItem, choice?
     tracks,
     selection,
     changeTracks,
+    changeAudioOutput,
   };
 }

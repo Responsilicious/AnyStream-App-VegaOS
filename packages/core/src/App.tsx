@@ -27,7 +27,7 @@ import {
   type RouteStack,
   type Section,
 } from './navigation';
-import { isJellyfinFamily, type DeviceCapabilities, type MediaItem, type MediaProvider, type ServerKind, type ServerRecord, type Session, type StartChoice } from './providers/types';
+import { isJellyfinFamily, type AudioOutput, type DeviceCapabilities, type MediaItem, type MediaProvider, type ServerKind, type ServerRecord, type Session, type StartChoice } from './providers/types';
 import { SEARCH_DEBOUNCE_MS } from './search';
 import { findAlternatives, SearchController } from './search/controller';
 import type { SearchSource, SourceHit } from './search/model';
@@ -47,6 +47,7 @@ import { ServerManagerScreen } from './screens/ServerManagerScreen';
 import { SeriesPage } from './screens/SeriesPage';
 import { platform } from './platform';
 import { HiddenContinueStore } from './storage/hiddenStore';
+import { AudioPrefsStore } from './storage/audioPrefs';
 import { LibraryPrefsStore } from './library/prefsStore';
 import type { BrowseMemory } from './screens/BrowseScreen';
 import { SessionStore } from './storage/sessionStore';
@@ -88,6 +89,8 @@ export const App = () => {
   const store = useMemo(() => new SessionStore(kv), [kv]);
   const connections = useMemo(() => new ConnectionStore(kv), [kv]);
   const libraryPrefs = useMemo(() => new LibraryPrefsStore(kv), [kv]);
+  const audioPrefs = useMemo(() => new AudioPrefsStore(kv), [kv]);
+  const saveAudioOutput = useCallback((output: AudioOutput) => audioPrefs.set(output), [audioPrefs]);
   const device = useMemo<DeviceInfo>(
     () => ({ id: store.getDeviceId(), name: DEVICE_NAME, version: APP_VERSION }),
     [store],
@@ -662,7 +665,16 @@ export const App = () => {
 
   switch (route.name) {
     case 'player':
-      return <PlayerScreen provider={provider} item={route.item} choice={route.choice} onExit={back} />;
+      return (
+        <PlayerScreen
+          provider={provider}
+          item={route.item}
+          choice={route.choice}
+          audioOutput={audioPrefs.get()}
+          onAudioOutputChange={saveAudioOutput}
+          onExit={back}
+        />
+      );
     case 'detail':
       return (
         <MoviePage

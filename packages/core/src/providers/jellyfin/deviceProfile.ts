@@ -1,4 +1,4 @@
-import { directPlayVideoCodecsFor } from '../../player/capabilities';
+import { directPlayVideoCodecsFor, maxAudioChannelsOf } from '../../player/capabilities';
 import type { DeviceCapabilities } from '../types';
 
 /** Jellyfin "DeviceProfile": tells the server what this TV plays so it can choose direct play or transcode. */
@@ -42,6 +42,8 @@ export function toJellyfinProfile(
     return list;
   };
 
+  const channels = maxAudioChannelsOf(caps);
+
   return {
     Name: 'AnyStream (Vega)',
     MaxStreamingBitrate: caps.maxBitrate,
@@ -56,7 +58,7 @@ export function toJellyfinProfile(
         Container: caps.hlsContainer,
         VideoCodec: caps.hlsVideoCodecs.join(','),
         AudioCodec: caps.hlsAudioCodecs.join(','),
-        MaxAudioChannels: '6',
+        MaxAudioChannels: String(channels),
         MinSegments: 1,
         BreakOnNonKeyFrames: true,
       },
@@ -65,6 +67,12 @@ export function toJellyfinProfile(
     CodecProfiles: [
       { Type: 'Video', Codec: 'h264', Conditions: conditions(true) },
       { Type: 'Video', Codec: 'hevc', Conditions: conditions(false) },
+      // A track with more channels than this is not played or copied as it is: the server mixes it down. Without
+      // it a 5.1 track direct played on stereo speakers left the dialogue in one speaker (9 Nov 2026).
+      {
+        Type: 'VideoAudio',
+        Conditions: [{ Condition: 'LessThanEqual', Property: 'AudioChannels', Value: String(channels), IsRequired: false }],
+      },
     ],
     ResponseProfiles: [],
     SubtitleProfiles: options.burnInSubtitles ? BURN_IN_SUBTITLES : SUBTITLES,

@@ -11,5 +11,5 @@ export { installTimerGuard } from './player/timerGuard';
 export { MemoryStore, type KeyValueStore } from './storage/keyValueStore';
 export { splitCidr, type LocalNetwork } from './discovery';
 export type { RandomBytes } from './providers/plex/keys';
-export type { DeviceCapabilities } from './providers/types';
+export type { AudioOutput, DeviceCapabilities } from './providers/types';
 export { DIRECT_PLAY_START_TIMEOUT_MS, SEEK_DEBOUNCE_MS, STORE_BUILD, APP_VERSION } from './config';

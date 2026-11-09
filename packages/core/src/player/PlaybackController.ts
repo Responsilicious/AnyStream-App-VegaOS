@@ -1,5 +1,6 @@
 import { PROGRESS_INTERVAL_MS } from '../config';
 import type {
+  AudioOutput,
   MediaItem,
   PlaybackDecision,
   PlaybackProvider,
@@ -22,6 +23,8 @@ export interface ControllerListener {
 export interface ControllerDeps {
   provider: PlaybackProvider;
   engine: PlayerEngine;
+  /** The speaker setting each stream is asked for with; see `AudioOutput`. Changed later by `changeAudioOutput`. */
+  audioOutput?: AudioOutput;
   progressIntervalMs?: number;
   setInterval?: (fn: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
@@ -44,10 +47,13 @@ export class PlaybackController {
   /** The audio track the server plays when none is asked for: choosing it again needs no special stream. */
   private defaultAudio: number | undefined;
   private changing = false;
+  private audioOutput: AudioOutput | undefined;
   private readonly listeners = new Set<ControllerListener>();
   private unsubscribe: (() => void) | null = null;
 
-  constructor(private readonly deps: ControllerDeps) {}
+  constructor(private readonly deps: ControllerDeps) {
+    this.audioOutput = deps.audioOutput;
+  }
 
   subscribe(listener: ControllerListener): () => void {
     this.listeners.add(listener);
@@ -75,7 +81,11 @@ export class PlaybackController {
     this.unsubscribe = this.deps.engine.subscribe(engineListener);
 
     try {
-      this.decision = await this.deps.provider.getPlayback(item.id, { startMs: item.resumeMs, ...choice });
+      this.decision = await this.deps.provider.getPlayback(item.id, {
+        startMs: item.resumeMs,
+        ...choice,
+        audioOutput: this.audioOutput,
+      });
       console.log(`playback: ${describeDecision(this.decision)}`);
       console.log(
         `playback tracks: asked ${JSON.stringify(choice ?? {})}; subtitles ` +
@@ -118,17 +128,35 @@ export class PlaybackController {
    * stream nothing changes and the error is thrown for the menu to show. Choosing what already plays does nothing.
    */
   async changeTracks(change: Partial<TrackSelection>): Promise<void> {
-    const item = this.item;
     const current = this.decision?.selection;
-    if (!item || !this.decision || this.stopped || this.changing) {
-      return;
-    }
     const next: TrackSelection = {
       audioIndex: change.audioIndex ?? current?.audioIndex,
       subtitleIndex: change.subtitleIndex ?? current?.subtitleIndex ?? -1,
     };
     if (next.audioIndex === current?.audioIndex && next.subtitleIndex === (current?.subtitleIndex ?? -1)) {
       return;
+    }
+    await this.restream(next, this.audioOutput);
+  }
+
+  /**
+   * Switches between stereo and surround sound (see `AudioOutput`) with a fresh stream at the current position,
+   * as a track change does. Throws, keeping the old setting and stream, if the server cannot make it.
+   */
+  async changeAudioOutput(output: AudioOutput): Promise<void> {
+    if (output === this.audioOutput) {
+      return;
+    }
+    if (await this.restream(this.decision?.selection, output)) {
+      this.audioOutput = output;
+    }
+  }
+
+  /** Swaps to a fresh stream for `next` and `audioOutput`; false when nothing was swapped. */
+  private async restream(next: TrackSelection | undefined, audioOutput: AudioOutput | undefined): Promise<boolean> {
+    const item = this.item;
+    if (!item || !this.decision || this.stopped || this.changing) {
+      return false;
     }
 
     this.changing = true;
@@ -138,13 +166,14 @@ export class PlaybackController {
         startMs: position,
         mediaSourceId: this.decision.mediaSourceId,
         ...this.trackOptions(next),
+        audioOutput,
       });
       if (this.stopped) {
-        return;
+        return false;
       }
       // What was asked for and what the server's stream actually carries, for when a choice seems to do nothing.
       console.log(
-        `tracks: asked audio=${next.audioIndex} subtitle=${next.subtitleIndex}; stream ${fresh.mode} ` +
+        `tracks: asked audio=${next?.audioIndex} subtitle=${next?.subtitleIndex} output=${audioOutput}; stream ${fresh.mode} ` +
           `burnedSubtitle=${/[?&]SubtitleMethod=Encode/i.test(fresh.url)} subtitleParam=${/[?&]SubtitleStreamIndex=/i.test(fresh.url)}`,
       );
 
@@ -164,6 +193,7 @@ export class PlaybackController {
       if (old && old.method === 'Transcode') {
         await this.safely(() => this.deps.provider.stopTranscode(old));
       }
+      return true;
     } finally {
       this.changing = false;
     }
@@ -223,6 +253,7 @@ export class PlaybackController {
           forceTranscode: true,
           mediaSourceId: this.decision?.mediaSourceId,
           ...this.trackOptions(this.decision?.selection),
+          audioOutput: this.audioOutput,
         });
         console.log(`playback: direct play failed (${failure.message}); ${describeDecision(this.decision)}`);
         this.announceTracks();

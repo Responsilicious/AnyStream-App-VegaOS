@@ -3,7 +3,7 @@ import { createJellyfinProvider } from '../src/providers/jellyfin';
 import { mapItem } from '../src/providers/jellyfin/items';
 import { getPlaybackDecision, reportStopped, stopTranscode } from '../src/providers/jellyfin/playback';
 import { toJellyfinProfile } from '../src/providers/jellyfin/deviceProfile';
-import { DEFAULT_CAPABILITIES } from '../src/player/capabilities';
+import { DEFAULT_CAPABILITIES, withAudioOutput } from '../src/player/capabilities';
 import type { MediaItem, PlaybackDecision } from '../src/providers/types';
 import { DEVICE, SERVER, SESSION, fakeFetch, type Reply } from './helpers/fakes';
 
@@ -407,6 +407,21 @@ describe('toJellyfinProfile', () => {
   it('uses MPEG-TS segments for a player that reads them', () => {
     const profile = toJellyfinProfile({ ...DEFAULT_CAPABILITIES, hlsContainer: 'ts', hlsAudioCodecs: ['aac', 'ac3', 'eac3'] }) as any;
     expect(profile.TranscodingProfiles[0]).toMatchObject({ Container: 'ts', AudioCodec: 'aac,ac3,eac3' });
+  });
+
+  it('limits audio to 6 channels, or to 2 for stereo speakers so the server mixes surround down', () => {
+    const channels = (profile: any) => ({
+      transcode: profile.TranscodingProfiles[0].MaxAudioChannels,
+      condition: profile.CodecProfiles.find((p: any) => p.Type === 'VideoAudio').Conditions[0],
+    });
+    expect(channels(toJellyfinProfile(DEFAULT_CAPABILITIES))).toEqual({
+      transcode: '6',
+      condition: { Condition: 'LessThanEqual', Property: 'AudioChannels', Value: '6', IsRequired: false },
+    });
+    const stereo = channels(toJellyfinProfile(withAudioOutput(DEFAULT_CAPABILITIES, 'stereo')));
+    expect(stereo.transcode).toBe('2');
+    expect(stereo.condition.Value).toBe('2');
+    expect(withAudioOutput(DEFAULT_CAPABILITIES, 'surround').maxAudioChannels).toBe(6);
   });
 
   it('keeps 4K for HEVC while capping H.264 at 1080p', () => {

@@ -139,7 +139,19 @@ export interface DeviceCapabilities {
   maxHeight: number;
   /** bits per second */
   maxBitrate: number;
+  /**
+   * Most audio channels the server may send. 2 makes the server mix surround tracks down to stereo itself; see
+   * `AudioOutput`. Left out, 6 (5.1).
+   */
+  maxAudioChannels?: number;
 }
+
+/**
+ * What the TV's sound comes out of. 'stereo' (TV speakers, a pair of speakers or headphones) has the server mix
+ * 5.1 and 7.1 tracks down to two channels, with the centre (dialogue) channel in both speakers. 'surround' sends
+ * multichannel audio as it is, for a soundbar or AV receiver.
+ */
+export type AudioOutput = 'stereo' | 'surround';
 
 export type PlayMethod = 'DirectPlay' | 'Transcode';
 
@@ -216,6 +228,8 @@ export interface PlaybackOptions {
   subtitleIndex?: number;
   /** The version of the file the track indexes belong to. The server ignores track choices without it. */
   mediaSourceId?: string;
+  /** Stereo asks the server for two-channel audio; left out, multichannel audio is allowed (see `AudioOutput`). */
+  audioOutput?: AudioOutput;
 }
 
 export type ProgressEvent = 'start' | 'progress' | 'pause' | 'resume' | 'stop';

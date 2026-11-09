@@ -1,4 +1,4 @@
-import type { DeviceCapabilities } from '../providers/types';
+import type { AudioOutput, DeviceCapabilities } from '../providers/types';
 
 /**
  * Baseline for a Fire TV Stick 4K Select: H.264 and HEVC in MP4 or MKV play directly. Anything else goes over
@@ -27,6 +27,24 @@ export const DEFAULT_CAPABILITIES: DeviceCapabilities = {
   maxHeight: 2160,
   maxBitrate: 40000000,
 };
+
+const SURROUND_CHANNELS = 6;
+const STEREO_CHANNELS = 2;
+
+/**
+ * The capabilities for one stream request with the user's speaker setting applied. Stereo caps audio at two
+ * channels, so the server downmixes 5.1 and 7.1 properly instead of the TV: on the stick a 5.1 track on stereo
+ * speakers played its dialogue (centre channel) from one speaker only (9 Nov 2026).
+ */
+export function withAudioOutput(caps: DeviceCapabilities, output: AudioOutput | undefined): DeviceCapabilities {
+  const limit = caps.maxAudioChannels ?? SURROUND_CHANNELS;
+  return { ...caps, maxAudioChannels: output === 'stereo' ? Math.min(limit, STEREO_CHANNELS) : limit };
+}
+
+/** Most channels the server may send for `caps` (6 when not set). */
+export function maxAudioChannelsOf(caps: DeviceCapabilities): number {
+  return caps.maxAudioChannels ?? SURROUND_CHANNELS;
+}
 
 /** The video codecs URL mode decodes from `container` (see `directPlayVideoCodecs`). */
 export function directPlayVideoCodecsFor(caps: DeviceCapabilities, container: string): string[] {
