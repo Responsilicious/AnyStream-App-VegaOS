@@ -99,6 +99,33 @@ describe('PlaybackController', () => {
     );
   });
 
+  it('asks every stream for the speaker setting, and restreams at the current position when it changes', async () => {
+    const element = new FakeElement();
+    const engine = new PlayerEngine({ createElement: () => element, createAdaptiveLoader: () => new FakeLoader() });
+    const provider = makeProvider([HLS, { ...HLS, playSessionId: 'ps-surround' }]);
+    const controller = new PlaybackController({ provider, engine, audioOutput: 'stereo' });
+    await engine.init();
+    engine.attachSurface('surface');
+
+    await controller.start(ITEM);
+    expect(provider.getPlayback).toHaveBeenCalledWith('item1', { startMs: 60000, audioOutput: 'stereo' });
+
+    element.currentTime = 90;
+    await controller.changeAudioOutput('surround');
+    expect(provider.getPlayback).toHaveBeenLastCalledWith(
+      'item1',
+      expect.objectContaining({ startMs: 90000, mediaSourceId: 'src1', audioOutput: 'surround' }),
+    );
+    // The old transcode is stopped, and choosing what is already set asks for nothing more.
+    expect(provider.stopTranscode).toHaveBeenCalledWith(HLS);
+    await controller.changeAudioOutput('surround');
+    expect(provider.getPlayback).toHaveBeenCalledTimes(2);
+
+    // A track change afterwards keeps the new setting.
+    await controller.changeTracks({ subtitleIndex: 4 });
+    expect(provider.getPlayback).toHaveBeenLastCalledWith('item1', expect.objectContaining({ audioOutput: 'surround' }));
+  });
+
   it('reports the start once playback really begins, then keeps reporting on a timer', async () => {
     const { controller, provider, element, timers } = await setup();
     await controller.start(ITEM);

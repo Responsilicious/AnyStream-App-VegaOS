@@ -253,6 +253,27 @@ describe('Plex playback', () => {
     expect(extra).toContain('name=video.bitDepth&value=8');
   });
 
+  it('has Plex mix surround down to stereo for stereo speakers instead of direct playing it', async () => {
+    expect(clientProfileExtra(DEFAULT_CAPABILITIES)).toContain(
+      'add-limitation(scope=videoAudioCodec&scopeName=*&type=upperBound&name=audio.channels&value=6)',
+    );
+
+    // An H.264 MKV with E-AC-3 5.1 direct plays for surround, but goes through Plex for stereo speakers.
+    const h264 = { ...MOVIE, Media: [{ ...MOVIE.Media[0], videoCodec: 'h264' }] };
+    const surround = provider(() => meta(h264));
+    expect(await surround.plex.getPlayback('42', { audioOutput: 'surround' })).toMatchObject({ mode: 'url' });
+
+    const stereo = provider(call => (call.url.includes('/decision') ? { body: { MediaContainer: { generalDecisionCode: 1001 } } } : meta(h264)));
+    const decision = await stereo.plex.getPlayback('42', { audioOutput: 'stereo' });
+    expect(decision).toMatchObject({ mode: 'hls' });
+    const sent = stereo.calls.find(c => c.url.includes('/decision'))!.url;
+    expect(decodeURIComponent(sent)).toContain('name=audio.channels&value=2');
+
+    // A stereo MP4 still plays directly.
+    const mp4 = provider(() => meta(MP4));
+    expect(await mp4.plex.getPlayback('43', { audioOutput: 'stereo' })).toMatchObject({ mode: 'url' });
+  });
+
   it('reports progress on the timeline and stops the transcode session', async () => {
     const { plex, calls } = provider(call =>
       call.url.includes('/decision') ? { body: { MediaContainer: { generalDecisionCode: 1001 } } } : call.url.includes('/library/metadata') ? meta(DTS) : { text: '' },

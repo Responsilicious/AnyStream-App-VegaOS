@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { BackHandler, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { px, useScale } from '../layout';
-import type { TrackInfo, TrackSelection } from '../providers/types';
+import type { AudioOutput, TrackInfo, TrackSelection } from '../providers/types';
 import { colors, type } from '../theme';
 import { FocusButton } from './FocusButton';
 
@@ -13,14 +13,22 @@ interface Props {
   /** The last change that failed, in plain words. */
   error: string | null;
   onChoose: (change: Partial<TrackSelection>) => void;
+  /** The speaker setting in use; the Speakers row is left out when undefined. */
+  audioOutput?: AudioOutput;
+  onAudioOutput?: (output: AudioOutput) => void;
   onClose: () => void;
 }
+
+const SPEAKERS: Array<{ output: AudioOutput; label: string }> = [
+  { output: 'stereo', label: 'Stereo' },
+  { output: 'surround', label: 'Surround' },
+];
 
 /**
  * The in-player menu that the remote's Menu button (three lines) opens: audio tracks and subtitles side by side
  * on a panel over the right of the picture. Back closes it and leaves playback running.
  */
-export function TrackMenu({ tracks, selection, busy, error, onChoose, onClose }: Props) {
+export function TrackMenu({ tracks, selection, busy, error, onChoose, audioOutput, onAudioOutput, onClose }: Props) {
   const s = useScale();
 
   useEffect(() => {
@@ -84,6 +92,27 @@ export function TrackMenu({ tracks, selection, busy, error, onChoose, onClose }:
           </ScrollView>
         </View>
       </View>
+      {audioOutput && onAudioOutput ? (
+        <View>
+          <Text style={styles.heading}>Speakers</Text>
+          <View style={styles.speakers}>
+            {SPEAKERS.map(option => (
+              <FocusButton
+                key={option.output}
+                label={`${option.output === audioOutput ? '✓  ' : ''}${option.label}`}
+                primary={option.output === audioOutput}
+                disabled={busy}
+                onPress={() => onAudioOutput(option.output)}
+                style={styles.speaker}
+              />
+            ))}
+          </View>
+          <Text style={styles.note}>
+            Stereo is for TV speakers, two speakers or headphones: your server mixes surround tracks down so speech
+            comes from both sides. Surround is for a soundbar or receiver.
+          </Text>
+        </View>
+      ) : null}
       <Text style={styles.note}>
         Subtitles are drawn into the picture by your server, so turning them on can take a moment to start.
       </Text>
@@ -104,6 +133,8 @@ const styles = StyleSheet.create({
   column: { flex: 1, marginRight: px(24) },
   heading: { color: colors.accent, fontSize: type.body, fontWeight: '800', marginBottom: px(12) },
   option: { marginBottom: px(12), alignItems: 'flex-start' },
+  speakers: { flexDirection: 'row' },
+  speaker: { marginRight: px(16) },
   empty: { color: colors.textMuted, fontSize: type.body },
   note: { color: colors.textMuted, fontSize: type.caption, marginTop: px(8) },
   error: { color: colors.danger, fontSize: type.body, marginTop: px(8) },

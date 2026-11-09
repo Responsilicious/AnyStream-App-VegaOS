@@ -1,5 +1,5 @@
 import { APP_NAME } from '../../config';
-import { directPlayVideoCodecsFor, urlModeReaches } from '../../player/capabilities';
+import { directPlayVideoCodecsFor, maxAudioChannelsOf, urlModeReaches, withAudioOutput } from '../../player/capabilities';
 import { buildQuery, joinUrl, type QueryValue } from '../../util/url';
 import type {
   DeviceCapabilities,
@@ -97,6 +97,8 @@ export function clientProfileExtra(caps: DeviceCapabilities): string {
     'add-limitation(scope=videoCodec&scopeName=h264&type=upperBound&name=video.width&value=1920)',
     'add-limitation(scope=videoCodec&scopeName=h264&type=upperBound&name=video.height&value=1080)',
     'add-limitation(scope=videoCodec&scopeName=h264&type=upperBound&name=video.bitDepth&value=8)',
+    // More channels than this are mixed down by Plex, never copied: stereo speakers get the dialogue in both.
+    `add-limitation(scope=videoAudioCodec&scopeName=*&type=upperBound&name=audio.channels&value=${maxAudioChannelsOf(caps)})`,
   ].join('+');
 }
 
@@ -135,6 +137,7 @@ export async function getPlexPlayback(
   sessionId: string,
   options: PlaybackOptions = {},
 ): Promise<PlaybackDecision> {
+  caps = withAudioOutput(caps, options.audioOutput);
   const raw = await fetchRawItem(http, id);
   if (!raw) {
     throw new PlexError('not-found', 'Title not found');
@@ -169,7 +172,8 @@ export async function getPlexPlayback(
     urlModeReaches(caps, http.baseUrl) &&
     caps.directPlayContainers.includes(container) &&
     directPlayVideoCodecsFor(caps, container).includes(lower(media.videoCodec)) &&
-    caps.audioCodecs.includes(lower(media.audioCodec));
+    caps.audioCodecs.includes(lower(media.audioCodec)) &&
+    (defaultAudio(media)?.channels ?? media.audioChannels ?? 0) <= maxAudioChannelsOf(caps);
   if (direct) {
     return {
       ...common,

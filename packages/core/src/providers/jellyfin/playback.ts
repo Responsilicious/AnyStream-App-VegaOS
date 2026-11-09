@@ -1,4 +1,4 @@
-import { directPlayVideoCodecsFor, urlModeReaches } from '../../player/capabilities';
+import { directPlayVideoCodecsFor, urlModeReaches, withAudioOutput } from '../../player/capabilities';
 import { buildQuery, joinUrl } from '../../util/url';
 import { msToTicks, ticksToMs } from '../../util/ticks';
 import type {
@@ -177,6 +177,7 @@ export async function getPlaybackDecision(
   itemId: string,
   options: PlaybackOptions = {},
 ): Promise<PlaybackDecision> {
+  caps = withAudioOutput(caps, options.audioOutput);
   const token = http.token ?? '';
   const maxBitrate = Math.min(options.maxBitrate ?? caps.maxBitrate, caps.maxBitrate);
   const force = options.forceTranscode === true;

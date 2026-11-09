@@ -5,7 +5,7 @@ import { FocusButton } from '../components/FocusButton';
 import { TrackMenu } from '../components/TrackMenu';
 import { usePlayback } from '../player/usePlayback';
 import { describeError, isJellyfinError } from '../providers/jellyfin';
-import type { MediaItem, PlaybackProvider, StartChoice, TrackSelection } from '../providers/types';
+import type { AudioOutput, MediaItem, PlaybackProvider, StartChoice, TrackSelection } from '../providers/types';
 import { colors, spacing, type } from '../theme';
 import { formatClock } from '../util/ticks';
 import { px } from '../layout';
@@ -15,14 +15,18 @@ interface Props {
   item: MediaItem;
   /** The version and tracks chosen on the title page, if any. */
   choice?: StartChoice;
+  /** Stereo or surround speakers (see `AudioOutput`), and where a change in the menu is saved. */
+  audioOutput?: AudioOutput;
+  onAudioOutputChange?: (output: AudioOutput) => void;
   onExit: () => void;
 }
 
 const OVERLAY_HIDE_MS = 5000;
 
-export function PlayerScreen({ provider, item, choice, onExit }: Props) {
+export function PlayerScreen({ provider, item, choice, audioOutput, onAudioOutputChange, onExit }: Props) {
   const { VideoSurface } = platform();
-  const playback = usePlayback(provider, item, choice);
+  const playback = usePlayback(provider, item, choice, audioOutput);
+  const [speakers, setSpeakers] = useState(audioOutput);
   const [overlayVisible, setOverlayVisible] = useState(true);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -50,6 +54,30 @@ export function PlayerScreen({ provider, item, choice, onExit }: Props) {
       }
     },
     [playback],
+  );
+
+  const chooseSpeakers = useCallback(
+    async (output: AudioOutput) => {
+      if (output === speakers) {
+        setMenuOpen(false);
+        return;
+      }
+      setMenuBusy(true);
+      setMenuError(null);
+      try {
+        await playback.changeAudioOutput(output);
+        setSpeakers(output);
+        onAudioOutputChange?.(output);
+        setMenuOpen(false);
+      } catch (e) {
+        setMenuError(
+          isJellyfinError(e) ? describeError(e) : 'The sound could not be changed. The current stream is still playing.',
+        );
+      } finally {
+        setMenuBusy(false);
+      }
+    },
+    [playback, speakers, onAudioOutputChange],
   );
 
   const showOverlay = useCallback(() => {
@@ -164,6 +192,8 @@ export function PlayerScreen({ provider, item, choice, onExit }: Props) {
           busy={menuBusy}
           error={menuError}
           onChoose={change => void chooseTracks(change)}
+          audioOutput={speakers}
+          onAudioOutput={output => void chooseSpeakers(output)}
           onClose={closeMenu}
         />
       ) : null}

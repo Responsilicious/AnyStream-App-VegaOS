@@ -79,6 +79,8 @@ export interface PlexMedia {
   container?: string;
   videoCodec?: string;
   audioCodec?: string;
+  /** Channels of the file's main audio track (Plex's summary; the streams list has each track's own). */
+  audioChannels?: number;
   videoResolution?: string;
   width?: number;
   Part?: PlexPart[];
