@@ -3,6 +3,7 @@ import { BackHandler, Image, StyleSheet, Text, View } from 'react-native';
 import { AuthButton } from '../components/AuthButton';
 import { AuthFrame, authStyles, HeroTitle } from '../components/AuthFrame';
 import { px } from '../layout';
+import { platform } from '../platform';
 import { colors, type } from '../theme';
 import { useBack } from '../useBack';
 
@@ -47,7 +48,7 @@ export function WelcomeScreen({ onConnect }: Props) {
       style={{ width: px(ART_WIDTH), height: px(ART_HEIGHT) }}
       resizeMode="contain"
       />
-      <Text style={styles.platform}>AnyStream for Vega OS</Text>
+      <Text style={styles.platform}>AnyStream for {platform().label ?? 'Vega OS'}</Text>
     </View>
   );
 

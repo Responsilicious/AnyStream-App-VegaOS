@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>AnyStream</title>
+    <link rel="icon" type="image/png" href="icon.png" />
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+      body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      /* The app draws its own focus states; the browser's outline would double them. */
+      #stage :focus { outline: none; }
+      #stage { position: absolute; overflow: hidden; transform-origin: 0 0; display: flex; }
+      #stage > div { flex: 1; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <noscript>AnyStream needs JavaScript.</noscript>
+    <script src="app.js"></script>
+  </body>
+</html>

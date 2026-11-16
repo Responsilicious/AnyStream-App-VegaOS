@@ -89,7 +89,7 @@ export const App = () => {
   const connections = useMemo(() => new ConnectionStore(kv), [kv]);
   const libraryPrefs = useMemo(() => new LibraryPrefsStore(kv), [kv]);
   const device = useMemo<DeviceInfo>(
-    () => ({ id: store.getDeviceId(), name: DEVICE_NAME, version: APP_VERSION }),
+    () => ({ id: store.getDeviceId(), name: platform().deviceName ?? DEVICE_NAME, version: APP_VERSION }),
     [store],
   );
 

@@ -3,7 +3,7 @@
  * registers its Platform and renders App.
  */
 export { App } from './App';
-export { setPlatform, hasPlatform, type Platform, type TVKeyEvent, type VideoSurfaceProps } from './platform';
+export { setPlatform, hasPlatform, type Platform, type TVKeyEvent, type TypedKey, type VideoSurfaceProps } from './platform';
 export { PlayerEngine, type MediaElementLike, type AdaptiveLoader, type EngineDeps, type StreamContent } from './player/PlayerEngine';
 export { DEFAULT_CAPABILITIES, probeCapabilities, type DecodingInfoFn } from './player/capabilities';
 export { installTypeSupportGuard } from './player/mseGuard';

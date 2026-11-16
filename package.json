@@ -2,16 +2,19 @@
   "name": "anystream",
   "version": "0.1.0",
   "private": true,
-  "description": "AnyStream: a Netflix-style Jellyfin and Plex client for Fire TV. packages/core is shared; apps/vega (Vega OS) and apps/fireos (Fire OS, Android TV) are the device shells.",
+  "description": "AnyStream: a Netflix-style Jellyfin and Plex client for Fire TV. packages/core is shared; apps/vega (Vega OS) apps/fireos (Fire OS, Android TV) and apps/web (desktop browsers) are the shells.",
   "license": "UNLICENSED",
   "workspaces": [
     "packages/core",
-    "apps/vega"
+    "apps/vega",
+    "apps/web"
   ],
   "scripts": {
-    "typecheck": "npm run typecheck -w @anystream/core && npm run typecheck -w @anystream/vega",
-    "test": "npm test -w @anystream/core",
-    "apply": "npm run apply -w @anystream/vega --"
+    "typecheck": "npm run typecheck -w @anystream/core && npm run typecheck -w @anystream/vega && npm run typecheck -w @anystream/web",
+    "test": "npm test -w @anystream/core && npm test -w @anystream/web",
+    "apply": "npm run apply -w @anystream/vega --",
+    "web": "npm start -w @anystream/web",
+    "build:web": "npm run build -w @anystream/web"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",

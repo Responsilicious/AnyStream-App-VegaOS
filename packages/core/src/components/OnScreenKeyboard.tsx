@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { px } from '../layout';
+import { useTypedText } from '../platform';
 import {
   applyKey,
   KEY_COLUMNS,
@@ -40,6 +41,12 @@ export function OnScreenKeyboard({ title, mode, value, onChange, onDone }: Props
   const [page, setPage] = useState<KeyPage>('letters');
   const [shift, setShift] = useState(false);
   const rows = keyboardRows(mode, page, shift);
+
+  // A physical keyboard (the web build) types straight into the field, exact case, as if its key were pressed.
+  useTypedText(key => {
+    onChange(applyKey(value, key.type === 'text' ? { type: 'insert', value: key.value } : { type: 'delete' }, MAX_LENGTH[mode]));
+    return true;
+  });
 
   const press = (action: KeyAction) => {
     switch (action.type) {

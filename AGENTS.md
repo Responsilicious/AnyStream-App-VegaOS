@@ -82,7 +82,7 @@ npm run typecheck                # tsc --noEmit, strict, core then vega shell
 npm test                         # jest + ts-jest, 400 unit tests in packages/core/__tests__/
 ```
 
-Layout: `packages/core` is the shared app (`@anystream/core`), `apps/vega` the Vega shell, `apps/fireos` the Fire OS shell. Core code must not import `@amazon-devices/*` or any other native module; anything device-specific goes behind the `Platform` interface in `packages/core/src/platform/index.ts` and is implemented once per shell (`apps/vega/src/platform/`).
+Layout: `packages/core` is the shared app (`@anystream/core`), `apps/vega` the Vega shell, `apps/fireos` the Fire OS shell, `apps/web` the browser shell (react-native-web; see `apps/web/README.md`). Core code must not import `@amazon-devices/*` or any other native module; anything device-specific goes behind the `Platform` interface in `packages/core/src/platform/index.ts` and is implemented once per shell (`apps/vega/src/platform/`).
 
 ### Fire OS
 

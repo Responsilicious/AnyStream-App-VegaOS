@@ -7,6 +7,7 @@ import { SourceBadge } from '../components/SourceBadge';
 import { SourceMenu, type SourceChoice } from '../components/SourceMenu';
 import { WideCard } from '../components/WideCard';
 import { px, useScale } from '../layout';
+import { useTypedText } from '../platform';
 import type { KindFilter, MediaItem } from '../providers/types';
 import { editQuery, KEY_ROWS, KIND_FILTERS, typeKey, type EditKey } from '../search';
 import { ALL_SOURCES, type SearchController, type SearchScope, type SearchSnapshot } from '../search/controller';
@@ -98,6 +99,17 @@ export function SearchScreen({ controller, activeKey, defaultScope, onOpen, onSw
   const setQuery = (update: (q: string) => string) => controller.setRequest({ ...snapshot.request, query: update(query) });
   const setFilter = (next: KindFilter) => controller.setRequest({ ...snapshot.request, filter: next });
   const edit = (key: EditKey) => setQuery(q => editQuery(q, key));
+  // A physical keyboard (the web build) types into the search box as the on-screen keys do.
+  useTypedText(key => {
+    if (key.type === 'delete') {
+      edit('delete');
+    } else if (key.value === ' ') {
+      edit('space');
+    } else {
+      setQuery(q => Array.from(key.value).reduce(typeKey, q));
+    }
+    return true;
+  });
 
   const closeMenu = (group?: SearchGroup) => {
     setMenu(undefined);
