@@ -9,6 +9,7 @@ Vega OS sticks and Fire OS (Android) sticks. Version 0.1.0. See `CHANGELOG.md` f
 packages/core   shared app: providers, connections, library state, player logic, screens, components
 apps/vega       Vega OS shell: Amazon media stack + hls.js, MMKV, netmgr, keplercrypto; overlay for a generated Vega project
 apps/fireos     Fire OS (Android TV) shell: ExoPlayer, react-native-tvos (in progress)
+apps/web        desktop browser shell: react-native-web, hls.js, keyboard and mouse (see apps/web/README.md)
 ```
 
 The core never imports a native module. Each shell builds a `Platform` (player engine, video surface,
@@ -124,6 +125,13 @@ playback checked there. See AGENTS.md "Fire OS" for what is still unverified.
 `package.json` and `index.js` (RN 0.83 template, package id `com.anystream.anystream`). Compare
 against them rather than copying blindly; `manifest.toml`'s `build-number` must be unique per
 uploaded VPKG.
+
+### Web (desktop browser) build
+
+`apps/web` runs the same app in Chrome, Edge, Firefox or Safari. `npm install --legacy-peer-deps` at the root,
+then `npm run web` serves it at http://localhost:8080 with rebuilds, and `npm run build:web` writes a static
+site to `apps/web/dist/` that any web server can host. See `apps/web/README.md` for controls, playback and
+the CORS and mixed-content rules a browser applies to media servers.
 
 ## Amazon hls.js (not in this repo)
 

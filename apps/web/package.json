@@ -1,0 +1,22 @@
+{
+  "name": "@anystream/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AnyStream in a desktop browser: react-native-web shell around @anystream/core with hls.js playback, keyboard and mouse.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "node scripts/build.mjs --serve",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@anystream/core": "0.1.0",
+    "hls.js": "1.6.19",
+    "react-dom": "18.2.0",
+    "react-native-web": "0.21.4"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

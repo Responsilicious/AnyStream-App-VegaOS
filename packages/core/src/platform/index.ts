@@ -7,7 +7,7 @@ import type { RandomBytes } from '../providers/plex/keys';
 import type { KeyValueStore } from '../storage/keyValueStore';
 
 /**
- * Everything the app needs from the device that differs between Vega and Fire OS. The core never imports a
+ * Everything the app needs from the device that differs between Vega, Fire OS and the web. The core never imports a
  * native module itself; each app shell builds one of these and hands it over with `setPlatform` before the
  * first render. Unit tests run with no platform set and only touch the pure modules.
  */
@@ -17,6 +17,12 @@ export interface TVKeyEvent {
   eventType: string;
   eventKeyAction?: number;
 }
+
+/**
+ * A key typed on a physical keyboard, for the on-screen keyboards to accept as if its key had been pressed.
+ * Only platforms with a real keyboard (the web) report these; TVs never do.
+ */
+export type TypedKey = { type: 'text'; value: string } | { type: 'delete' };
 
 /** What the player screen asks the platform to draw: the video surface and, where separate, the captions view. */
 export interface VideoSurfaceProps {
@@ -28,7 +34,11 @@ export interface VideoSurfaceProps {
 }
 
 export interface Platform {
-  name: 'vega' | 'fireos';
+  name: 'vega' | 'fireos' | 'web';
+  /** Shown in the server's "Devices" list; defaults to DEVICE_NAME. Keep ASCII: it travels in an HTTP header. */
+  deviceName?: string;
+  /** Where this build runs, for "AnyStream for ..." on the Welcome screen; defaults to "Vega OS". */
+  label?: string;
   /** The media element and adaptive loader for this device, wrapped in the shared engine. */
   createPlayerEngine(): PlayerEngine;
   /** What the device decodes. Must resolve; fall back to safe defaults rather than reject. */
@@ -41,6 +51,12 @@ export interface Platform {
   randomBytes?: RandomBytes;
   /** Subscribes to remote key events for the life of the calling component. A React hook. */
   useTVEventHandler(handler: (event: TVKeyEvent) => void): void;
+  /**
+   * Subscribes to physical keyboard typing while the calling component is mounted. A React hook. The handler
+   * returns true when it used the key, so the platform does not also treat it as a remote key (Backspace).
+   * Optional: TVs have no keyboard.
+   */
+  useTypedText?(handler: (key: TypedKey) => boolean): void;
   VideoSurface: ComponentType<VideoSurfaceProps>;
 }
 
@@ -65,4 +81,10 @@ export function hasPlatform(): boolean {
 
 export function useTVEventHandler(handler: (event: TVKeyEvent) => void): void {
   platform().useTVEventHandler(handler);
+}
+
+/** Physical keyboard typing for the on-screen keyboards; does nothing on a TV. */
+export function useTypedText(handler: (key: TypedKey) => boolean): void {
+  // The platform is set once before the first render and never changes, so the hook order is stable.
+  platform().useTypedText?.(handler);
 }
