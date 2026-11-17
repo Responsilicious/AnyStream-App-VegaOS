@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import {
+  ActivityIndicator,
+  BackHandler,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { FocusButton } from '../components/FocusButton';
 import { Glyph } from '../components/Glyph';
 import { KeyButton } from '../components/KeyButton';
@@ -7,8 +17,9 @@ import { SourceBadge } from '../components/SourceBadge';
 import { SourceMenu, type SourceChoice } from '../components/SourceMenu';
 import { WideCard } from '../components/WideCard';
 import { px, useScale } from '../layout';
+import { hasSystemTextInput } from '../platform';
 import type { KindFilter, MediaItem } from '../providers/types';
-import { editQuery, KEY_ROWS, KIND_FILTERS, typeKey, type EditKey } from '../search';
+import { editQuery, KEY_ROWS, KIND_FILTERS, MAX_QUERY, systemKeyboardQuery, typeKey, type EditKey } from '../search';
 import { ALL_SOURCES, type SearchController, type SearchScope, type SearchSnapshot } from '../search/controller';
 import { findGroup, hitsOn } from '../search/match';
 import type { SearchGroup, SourceHit } from '../search/model';
@@ -46,6 +57,9 @@ const MAX_RETRY_BUTTONS = 3;
  * connected server (docs/cross-server-search.md): one card per title with the servers that have it. Results
  * show as each server answers; a server that fails leaves the others' results up and gets its own Retry.
  * Choosing a card never switches or plays: a copy on another server asks "Switch to <server>?" first.
+ *
+ * On Vega and Fire OS the search box is also a real text field: selecting it opens the system keyboard, whose
+ * microphone takes Alexa dictation, so the voice button can fill the box (see `Platform.systemTextInput`).
  */
 export function SearchScreen({ controller, activeKey, defaultScope, onOpen, onSwitchOpen }: Props) {
   const s = useScale();
@@ -98,6 +112,13 @@ export function SearchScreen({ controller, activeKey, defaultScope, onOpen, onSw
   const setQuery = (update: (q: string) => string) => controller.setRequest({ ...snapshot.request, query: update(query) });
   const setFilter = (next: KindFilter) => controller.setRequest({ ...snapshot.request, filter: next });
   const edit = (key: EditKey) => setQuery(q => editQuery(q, key));
+  const voice = hasSystemTextInput();
+  const [boxFocused, setBoxFocused] = useState(false);
+  // Read the request at change time: dictation can arrive in several updates before this screen re-renders.
+  const setSpoken = (text: string) => {
+    const request = controller.snapshot().request;
+    controller.setRequest({ ...request, query: systemKeyboardQuery(request.query, text) });
+  };
 
   const closeMenu = (group?: SearchGroup) => {
     setMenu(undefined);
@@ -181,14 +202,34 @@ export function SearchScreen({ controller, activeKey, defaultScope, onOpen, onSw
       <View style={{ width: panelWidth }}>
         <Text style={styles.title}>Search</Text>
         <Text style={[styles.label, many && styles.labelAccent]}>{many ? 'Search all your servers' : 'Search your library'}</Text>
-        <View style={styles.input}>
+        <View style={[styles.input, voice && boxFocused && styles.inputFocused]}>
           <View style={styles.glyph}>
             <View style={styles.glyphLens} />
             <View style={styles.glyphHandle} />
           </View>
-          <Text style={[styles.inputText, !query && styles.placeholder]} numberOfLines={1}>
-            {query || 'Type a title'}
-          </Text>
+          {voice ? (
+            <TextInput
+              value={query}
+              onChangeText={setSpoken}
+              onFocus={() => setBoxFocused(true)}
+              onBlur={() => setBoxFocused(false)}
+              placeholder="Type or speak a title"
+              placeholderTextColor={colors.textMuted}
+              selectionColor={colors.accent}
+              underlineColorAndroid="transparent"
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={MAX_QUERY + 2}
+              returnKeyType="search"
+              blurOnSubmit
+              accessibilityLabel="Search box. Select it, then hold the voice button and speak"
+              style={[styles.inputText, styles.inputField]}
+            />
+          ) : (
+            <Text style={[styles.inputText, !query && styles.placeholder]} numberOfLines={1}>
+              {query || 'Type a title'}
+            </Text>
+          )}
         </View>
 
         <View style={styles.keys}>
@@ -215,6 +256,11 @@ export function SearchScreen({ controller, activeKey, defaultScope, onOpen, onSw
           <Glyph name="back" color={colors.textMuted} size={30} />
           <Text style={styles.hint}>{'Back  ·  Leave search'}</Text>
         </View>
+        {voice ? (
+          <Text style={[styles.hint, styles.voiceHint, boxFocused && styles.voiceHintActive]}>
+            {boxFocused ? 'Hold the voice button and speak' : 'To search by voice, select the search box'}
+          </Text>
+        ) : null}
       </View>
 
       <View style={[styles.results, { marginLeft: s(48) }]}>
@@ -329,6 +375,9 @@ const styles = StyleSheet.create({
     marginBottom: px(18),
   },
   inputText: { flex: 1, color: colors.text, fontSize: type.heading, marginLeft: px(16) },
+  inputFocused: { borderColor: colors.focusRing },
+  /** A bare TextInput brings Android's padding and line height; match the Text it replaces. */
+  inputField: { paddingVertical: 0, paddingHorizontal: 0, height: '100%' },
   placeholder: { color: colors.textMuted },
   glyph: { width: px(28), height: px(28) },
   glyphLens: { width: px(20), height: px(20), borderRadius: px(10), borderWidth: 3, borderColor: colors.textMuted },
@@ -347,6 +396,8 @@ const styles = StyleSheet.create({
   editKey: { minHeight: px(KEY), paddingHorizontal: px(24), marginRight: px(KEY_GAP), minWidth: px(140) },
   hintRow: { flexDirection: 'row', alignItems: 'center', marginTop: px(14) },
   hint: { color: colors.textMuted, fontSize: type.caption, marginLeft: px(12) },
+  voiceHint: { marginLeft: 0, marginTop: px(10) },
+  voiceHintActive: { color: colors.accent },
   results: { flex: 1 },
   headingRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: px(14) },
   heading: { flex: 1, color: colors.text, fontSize: type.title, fontWeight: '800' },

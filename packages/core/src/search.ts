@@ -38,6 +38,21 @@ export function editQuery(query: string, key: EditKey): string {
   }
 }
 
+/**
+ * Text from the device's own keyboard (typed there, or dictated with the Alexa button), made to match what the
+ * on-screen keys build: lower case, single spaces, no leading space, at most MAX_QUERY characters. Dictation
+ * arrives as a whole phrase and often ends with a full stop ("The Matrix."), so trailing sentence punctuation
+ * is dropped when more than one character arrived at once; a single typed "." is kept ("mr." on the way to
+ * "mr. robot").
+ */
+export function systemKeyboardQuery(previous: string, next: string): string {
+  let text = next.toLowerCase().replace(/\s+/g, ' ').replace(/^ /, '');
+  if (text.length - previous.length > 1) {
+    text = text.replace(/[.!?,;:\u3002]+\s*$/, '');
+  }
+  return text.slice(0, MAX_QUERY);
+}
+
 export const KIND_FILTERS: Array<{ filter: KindFilter; label: string }> = [
   { filter: 'all', label: 'All' },
   { filter: 'movies', label: 'Movies' },

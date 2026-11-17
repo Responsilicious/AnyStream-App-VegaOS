@@ -106,3 +106,14 @@ Built and unit-tested; **not yet run on hardware**, so nothing below is verified
 - **“Also on…”:** a title opened from search reuses the group's other copies. A title opened from Home or a library runs `findAlternatives`: it searches the other servers by title and keeps only copies whose external ids agree. A failed or slow server just isn't listed. There is no native `findByExternalIds` per provider yet; episodes are not looked up this way.
 - **Tunables** in `config.ts`: `SEARCH_CONCURRENCY` (3), `SEARCH_SOURCE_DEADLINE_MS` (8 s), `SEARCH_SESSION_ENTRIES` (12).
 - **Not done:** sanitised metadata fixtures from the three real servers; progress on search cards (cards show none, and title pages load fresh progress); pagination across servers; the hardware checks listed above.
+
+## Voice search (Alexa button)
+
+Added 17 November 2026. On Vega and Fire OS the search box is a real text field (`Platform.systemTextInput`). Selecting it opens the device's own keyboard; holding the Alexa/voice button then dictates into it, and the text goes through `systemKeyboardQuery` (lower case, single spaces, dictation's trailing full stop dropped, `MAX_QUERY` cap) before it reaches `SearchController`. The on-screen keys still work and stay the first focus.
+
+Why this route and no other:
+
+- Neither platform gives an app the mic button or a speech-to-text API. Vega: Amazon staff say "VegaOS does not expose an app-level speech-to-text API like Android's SpeechRecognizer"; dictation "just works" through the built-in keyboard on a focused `TextInput` (needs `com.amazon.inputmethod.service` in the manifest). Fire OS: the mic is "a system event and cannot be intercepted", and `SpeechRecognizer` is not supported.
+- Fire OS keyboard dictation depends on the stick, remote and keyboard build; on some sticks the mic hands off to Alexa's global search instead. The hint text therefore says "select the search box" rather than promising dictation everywhere.
+- Taking every in-app Alexa request as a search would need Content Launcher (Vega) or the Video Skills Kit (Fire OS), which deliver voice requests only to catalog-integrated apps: the app's whole catalog described in Amazon's schema and uploaded to Amazon. A client for each user's own servers has no such catalog, so this is out of reach.
+- The web build registers no `systemTextInput`, so its search screen is unchanged.

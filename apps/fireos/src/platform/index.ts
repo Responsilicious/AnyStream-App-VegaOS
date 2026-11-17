@@ -16,6 +16,8 @@ export const fireosPlatform: Platform = {
   probeDeviceCapabilities,
   createKeyValueStore: createMmkvStore,
   readLocalNetwork,
+  // Alexa dictation into the search box through the system keyboard, on remotes and Fire OS builds that offer it.
+  systemTextInput: true,
   useTVEventHandler,
   VideoSurface,
 };
