@@ -1,4 +1,4 @@
-import { editQuery, GENRE_FILTERS, KEY_ROWS, KIND_FILTERS, MAX_QUERY, typeKey } from '../src/search';
+import { editQuery, GENRE_FILTERS, KEY_ROWS, KIND_FILTERS, MAX_QUERY, systemKeyboardQuery, typeKey } from '../src/search';
 import type { MediaItem } from '../src/providers/types';
 import { typeLabel, typeYearSubtitle } from '../src/util/format';
 
@@ -43,6 +43,32 @@ describe('query editing', () => {
     expect(editQuery('star', 'delete')).toBe('sta');
     expect(editQuery('', 'delete')).toBe('');
     expect(editQuery('star wars', 'clear')).toBe('');
+  });
+});
+
+describe('system keyboard and voice dictation', () => {
+  it('lower-cases dictated phrases and drops the full stop dictation adds', () => {
+    expect(systemKeyboardQuery('', 'The Matrix.')).toBe('the matrix');
+    expect(systemKeyboardQuery('', 'Star Wars?')).toBe('star wars');
+    expect(systemKeyboardQuery('star ', 'star Trek. ')).toBe('star trek');
+  });
+
+  it('keeps a single typed full stop', () => {
+    expect(systemKeyboardQuery('mr', 'mr.')).toBe('mr.');
+    expect(systemKeyboardQuery('mr.', 'mr. r')).toBe('mr. r');
+  });
+
+  it('collapses whitespace and never leads with a space', () => {
+    expect(systemKeyboardQuery('', '  the\n office')).toBe('the office');
+  });
+
+  it('caps the query like the on-screen keys', () => {
+    expect(systemKeyboardQuery('', 'a'.repeat(MAX_QUERY + 10))).toHaveLength(MAX_QUERY);
+  });
+
+  it('lets deletes through untouched', () => {
+    expect(systemKeyboardQuery('star wars', 'star war')).toBe('star war');
+    expect(systemKeyboardQuery('star wars', '')).toBe('');
   });
 });
 

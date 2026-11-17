@@ -39,6 +39,13 @@ export interface Platform {
   readLocalNetwork(): Promise<LocalNetwork | null>;
   /** A cryptographically secure random source, or undefined when the device has none (Plex linking then uses legacy tokens). */
   randomBytes?: RandomBytes;
+  /**
+   * The search box is a real text field that opens the device's own keyboard, whose microphone key takes Alexa
+   * dictation (hold the Alexa/voice button and speak). Neither Vega nor Fire OS gives apps the mic button or a
+   * speech-to-text API, so the system keyboard is the only route from voice to an app's text field. Off (or
+   * absent): the search box is display-only and the on-screen keys are the only input.
+   */
+  systemTextInput?: boolean;
   /** Subscribes to remote key events for the life of the calling component. A React hook. */
   useTVEventHandler(handler: (event: TVKeyEvent) => void): void;
   VideoSurface: ComponentType<VideoSurfaceProps>;
@@ -61,6 +68,11 @@ export function platform(): Platform {
 /** True once a shell has registered a platform (false in unit tests). */
 export function hasPlatform(): boolean {
   return current !== null;
+}
+
+/** True when the search box should be a real text field (see `Platform.systemTextInput`). */
+export function hasSystemTextInput(): boolean {
+  return current?.systemTextInput === true;
 }
 
 export function useTVEventHandler(handler: (event: TVKeyEvent) => void): void {

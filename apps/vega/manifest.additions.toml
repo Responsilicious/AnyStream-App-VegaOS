@@ -46,6 +46,11 @@ id = "com.amazon.audio.stream"
 # Required for captions.
 id = "com.amazon.devconf.privilege.accessibility"
 
+# The search box opens the system keyboard, whose microphone key takes Alexa dictation (hold the
+# Alexa button and speak). Vega has no app-level speech-to-text API; this is Amazon's supported route.
+[[wants.service]]
+id = "com.amazon.inputmethod.service"
+
 [offers]
 [[offers.service]]
 id = "com.amazon.gipc.uuid.*"

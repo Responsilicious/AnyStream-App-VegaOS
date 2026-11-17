@@ -14,6 +14,8 @@ export const vegaPlatform: Platform = {
   createKeyValueStore: createMmkvStore,
   readLocalNetwork,
   randomBytes: keplerRandom(),
+  // Alexa dictation into the search box through the system keyboard (com.amazon.inputmethod.service on Vega).
+  systemTextInput: true,
   useTVEventHandler,
   VideoSurface,
 };
